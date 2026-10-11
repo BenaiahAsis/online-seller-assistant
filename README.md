@@ -189,13 +189,13 @@ When both servers are running:
 
 ## 👥 Team Roles & Responsibilities
 
-Fill in team member names and primary responsibilities below:
+The DevOps Engineer owns CI/CD and deployment. All other members are Developers.
 
 | Role | Team Member | Primary Responsibilities |
-|---|---|---|
-| **DevOps Engineer** | *[Fill in name]* | CI/CD pipelines, containerization, environment configuration, repo standards, deployment |
-| **Frontend Lead** | *[Fill in name]* | React UI architecture, Tailwind styling, state management, API integration |
-| **Backend Lead** | *[Fill in name]* | FastAPI API design, PostgreSQL data modeling, SQLAlchemy ORM, authentication |
-| **AI / Integrations Engineer** | *[Fill in name]* | OpenAI API orchestration, prompt engineering, smart assistant features |
-| **QA & Testing Engineer** | *[Fill in name]* | Automated test coverage (pytest, frontend tests), edge case validation |
-| **Product / Scrum Lead** | *[Fill in name]* | Requirements tracking, user stories, milestone alignment, group coordination |
+|------|-------------|--------------------------|
+| **DevOps Engineer** | Benaiah Asis | CI/CD pipelines, containerization, environment configuration, repo standards, deployment |
+| **Frontend Lead** | Joan Ballarta | React UI architecture, Tailwind styling, state management, API integration |
+| **Backend Lead** | Al Rodge Rendal | FastAPI API design, PostgreSQL data modeling, SQLAlchemy ORM, authentication |
+| **AI / Integrations Engineer** | Ken Matthew Navarro | OpenAI API orchestration, prompt engineering, smart assistant features |
+| **QA & Testing Engineer** | Ruelyn Jose | Automated test coverage (pytest, frontend tests), edge case validation |
+| **Product / Scrum Lead** | Benaiah Asis | Requirements tracking, user stories, milestone alignment, group coordination |
