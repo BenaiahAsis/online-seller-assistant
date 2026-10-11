@@ -1,6 +1,17 @@
 # Online Seller Assistant
 
-An intelligent assistant platform designed to empower online sellers by automating product listing generation, streamlining customer communication, managing inventory records, and providing actionable sales insights.
+A full-stack web application that helps small and new online sellers create better
+product listings with less effort. Sellers enter basic product details such as name,
+price, features, materials, and quantity. The app then runs them through a sequential
+three-agent AI workflow:
+
+1. **Product Analysis Agent** organizes the raw details into a structured product profile.
+2. **Market Analysis Agent** identifies target customers, selling points, and keywords.
+3. **Listing Generation Agent** writes a complete, ready-to-use product listing.
+
+The backend validates each agent's output before passing it to the next one and stores
+the products, analyses, and listings in a PostgreSQL database. Sellers can review and
+edit the final listing before saving it.
 
 ---
 
