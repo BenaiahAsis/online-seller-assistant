@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict
+from typing import Any
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
@@ -14,7 +14,7 @@ def get_database_url() -> str:
     return url
 
 
-def check_database_connection() -> Dict[str, Any]:
+def check_database_connection() -> dict[str, Any]:
     """Verify database connectivity by executing SELECT 1 using SQLAlchemy."""
     db_url = get_database_url()
     if not db_url:
