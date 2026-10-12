@@ -17,7 +17,7 @@ def test_root_endpoint():
 
 
 def test_health_success():
-    """Verify /health returns 200 when SELECT 1 executes successfully against PostgreSQL."""
+    """Verify /health returns 200 when SELECT 1 executes successfully."""
     mock_success = {
         "connected": True,
         "detail": "SELECT 1 executed successfully against PostgreSQL",
