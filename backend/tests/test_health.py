@@ -59,3 +59,15 @@ def test_health_missing_database_url():
         assert data["status"] == "unhealthy"
         assert data["database"] == "disconnected"
         assert "DATABASE_URL environment variable is not configured" in data["error"]
+
+
+def test_cors_headers_allowed_origin():
+    """Verify CORS headers are returned for allowed default origin."""
+    response = client.get(
+        "/",
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == (
+        "http://localhost:5173"
+    )
