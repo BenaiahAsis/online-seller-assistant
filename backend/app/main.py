@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -10,10 +12,18 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# Parse CORS origins from environment variable (comma-separated), defaulting to http://localhost:5173
+cors_origins_env = os.getenv("CORS_ORIGINS", "http://localhost:5173")
+allowed_origins = [
+    origin.strip() for origin in cors_origins_env.split(",") if origin.strip()
+]
+if not allowed_origins:
+    allowed_origins = ["http://localhost:5173"]
+
 # Enable CORS for frontend clients
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
