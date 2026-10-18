@@ -199,3 +199,13 @@ The DevOps Engineer owns CI/CD and deployment. All other members are Developers.
 | **AI / Integrations Engineer** | Ken Matthew Navarro | OpenAI API orchestration, prompt engineering, smart assistant features |
 | **QA & Testing Engineer** | Ruelyn Jose | Automated test coverage (pytest, frontend tests), edge case validation |
 | **Product / Scrum Lead** | Benaiah Asis | Requirements tracking, user stories, milestone alignment, group coordination |
+
+---
+
+## 📚 Project Documentation
+
+- [📋 Sprint Deliverables & Action Items](docs/SPRINT_DELIVERABLES.md): Full sprint breakdown (Sprints 1-4) with step-by-step assignments for each team member.
+- [🚀 Team Onboarding & Git Guide](docs/TEAM_ONBOARDING.md): Local environment setup, Git workflow, and branch rules.
+- [🔄 CI/CD Pipeline Guide](docs/PIPELINE.md): GitHub Actions automation, pip/npm caching, and Render/Vercel deployment.
+- [📖 DevOps Runbook](docs/runbook.md): Disaster recovery, troubleshooting, and deployment runbook.
+
