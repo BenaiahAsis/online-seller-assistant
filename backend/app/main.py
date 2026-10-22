@@ -36,10 +36,11 @@ allowed_origins = [
 if not allowed_origins:
     allowed_origins = ["http://localhost:5173"]
 
-# Enable CORS for frontend clients
+# Enable CORS for frontend clients (supporting localhost and Vercel domains)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=r"^https:\/\/.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
