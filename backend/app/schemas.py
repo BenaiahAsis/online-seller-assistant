@@ -32,7 +32,22 @@ class ProductAnalysisResponse(BaseModel):
     key_specifications: dict[str, Any] | None = None
     selling_points: list[str] | None = None
     suggested_keywords: list[str] | None = None
+    market_insights: dict[str, Any] | None = None
     raw_summary: str | None = None
+    created_at: datetime
+
+
+class ProductListingResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    product_id: int
+    platform: str
+    title: str
+    description: str
+    bullet_points: list[str] = Field(default_factory=list)
+    hashtags: list[str] = Field(default_factory=list)
+    call_to_action: str | None = None
     created_at: datetime
 
 
@@ -43,8 +58,15 @@ class ProductResponse(ProductBase):
     status: str
     created_at: datetime
     analysis: ProductAnalysisResponse | None = None
+    listings: list[ProductListingResponse] = Field(default_factory=list)
 
 
 class ProductListResponse(BaseModel):
     products: list[ProductResponse]
     total: int
+
+
+class FullPipelineResponse(BaseModel):
+    product: ProductResponse
+    status: str
+    message: str

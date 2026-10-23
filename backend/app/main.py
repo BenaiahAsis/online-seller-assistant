@@ -8,10 +8,20 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.agents.product_analyzer import run_product_analysis_agent
+from app.agents import (
+    run_listing_generator_agent,
+    run_market_analyzer_agent,
+    run_product_analysis_agent,
+)
 from app.database import check_database_connection, get_db, init_db
-from app.models import Product, ProductAnalysis
-from app.schemas import ProductCreate, ProductListResponse, ProductResponse
+from app.models import Product, ProductAnalysis, ProductListing
+from app.schemas import (
+    FullPipelineResponse,
+    ProductCreate,
+    ProductListingResponse,
+    ProductListResponse,
+    ProductResponse,
+)
 
 
 @asynccontextmanager
@@ -81,7 +91,7 @@ def health_check():
 
 
 # -------------------------------------------------------------------------
-# Product & AI Agent Endpoints
+# Product & Multi-Agent AI Endpoints
 # -------------------------------------------------------------------------
 
 
@@ -149,7 +159,6 @@ def trigger_product_analysis(product_id: int, db: Annotated[Session, Depends(get
             detail=f"Product with ID {product_id} not found.",
         )
 
-    # Run Agent 1
     input_data = {
         "name": product.name,
         "price": product.price,
@@ -160,7 +169,6 @@ def trigger_product_analysis(product_id: int, db: Annotated[Session, Depends(get
     analysis_result = run_product_analysis_agent(input_data)
 
     if product.analysis:
-        # Update existing analysis
         analysis = product.analysis
         analysis.category = analysis_result.get("category")
         analysis.target_audience = analysis_result.get("target_audience")
@@ -169,7 +177,6 @@ def trigger_product_analysis(product_id: int, db: Annotated[Session, Depends(get
         analysis.suggested_keywords = analysis_result.get("suggested_keywords")
         analysis.raw_summary = analysis_result.get("raw_summary")
     else:
-        # Create new analysis record
         analysis = ProductAnalysis(
             product_id=product.id,
             category=analysis_result.get("category"),
@@ -185,3 +192,165 @@ def trigger_product_analysis(product_id: int, db: Annotated[Session, Depends(get
     db.commit()
     db.refresh(product)
     return product
+
+
+@app.post(
+    "/api/products/{product_id}/market-analysis",
+    response_model=ProductResponse,
+    tags=["Agents"],
+)
+def trigger_market_analysis(product_id: int, db: Annotated[Session, Depends(get_db)]):
+    """Run Agent 2 (Market Analysis Agent) using Agent 1's structured output."""
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Product with ID {product_id} not found.",
+        )
+
+    # Ensure Agent 1 has run first
+    if not product.analysis:
+        trigger_product_analysis(product_id=product_id, db=db)
+        db.refresh(product)
+
+    product_data = {
+        "name": product.name,
+        "price": product.price,
+        "materials": product.materials,
+        "features": product.features,
+    }
+    analysis_data = {
+        "category": product.analysis.category if product.analysis else None,
+        "target_audience": (
+            product.analysis.target_audience if product.analysis else None
+        ),
+        "selling_points": (product.analysis.selling_points if product.analysis else []),
+        "suggested_keywords": (
+            product.analysis.suggested_keywords if product.analysis else []
+        ),
+    }
+
+    market_result = run_market_analyzer_agent(product_data, analysis_data)
+    if product.analysis:
+        product.analysis.market_insights = market_result
+
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+@app.post(
+    "/api/products/{product_id}/generate-listings",
+    response_model=list[ProductListingResponse],
+    tags=["Agents"],
+)
+def trigger_listing_generation(
+    product_id: int, db: Annotated[Session, Depends(get_db)]
+):
+    """Run Agent 3 to create Shopee, TikTok, and Lazada listings."""
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Product with ID {product_id} not found.",
+        )
+
+    # Ensure Agent 1 & Agent 2 have run
+    if not product.analysis:
+        trigger_product_analysis(product_id=product_id, db=db)
+        db.refresh(product)
+    if not product.analysis.market_insights:
+        trigger_market_analysis(product_id=product_id, db=db)
+        db.refresh(product)
+
+    product_data = {
+        "name": product.name,
+        "price": product.price,
+        "materials": product.materials,
+        "features": product.features,
+    }
+    analysis_data = {
+        "category": product.analysis.category,
+        "selling_points": product.analysis.selling_points or [],
+        "suggested_keywords": product.analysis.suggested_keywords or [],
+    }
+    market_data = product.analysis.market_insights or {}
+
+    listings_result = run_listing_generator_agent(
+        product_data, analysis_data, market_data
+    )
+
+    # Replace existing listings with freshly generated versions
+    stmt = select(ProductListing).where(ProductListing.product_id == product.id)
+    existing_listings = db.scalars(stmt).all()
+    for item in existing_listings:
+        db.delete(item)
+
+    saved_listings: list[ProductListing] = []
+    for item in listings_result:
+        listing = ProductListing(
+            product_id=product.id,
+            platform=item.get("platform", "shopee"),
+            title=item.get("title", product.name),
+            description=item.get("description", ""),
+            bullet_points=item.get("bullet_points") or [],
+            hashtags=item.get("hashtags") or [],
+            call_to_action=item.get("call_to_action"),
+        )
+        db.add(listing)
+        saved_listings.append(listing)
+
+    product.status = "completed"
+    db.commit()
+    for l_obj in saved_listings:
+        db.refresh(l_obj)
+    return saved_listings
+
+
+@app.post(
+    "/api/products/{product_id}/full-pipeline",
+    response_model=FullPipelineResponse,
+    tags=["Agents"],
+)
+def trigger_full_pipeline(product_id: int, db: Annotated[Session, Depends(get_db)]):
+    """Execute the full sequential 3-agent pipeline in a single automated flow."""
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Product with ID {product_id} not found.",
+        )
+
+    # Step 1: Agent 1 (Product Analyzer)
+    trigger_product_analysis(product_id=product_id, db=db)
+
+    # Step 2: Agent 2 (Market Analyzer)
+    trigger_market_analysis(product_id=product_id, db=db)
+
+    # Step 3: Agent 3 (Listing Generator)
+    trigger_listing_generation(product_id=product_id, db=db)
+
+    db.refresh(product)
+    return FullPipelineResponse(
+        product=product,
+        status="completed",
+        message="Full 3-agent pipeline successfully executed.",
+    )
+
+
+@app.get(
+    "/api/products/{product_id}/listings",
+    response_model=list[ProductListingResponse],
+    tags=["Listings"],
+)
+def get_product_listings(product_id: int, db: Annotated[Session, Depends(get_db)]):
+    """Fetch all generated marketplace listings for a specific product."""
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Product with ID {product_id} not found.",
+        )
+    stmt = select(ProductListing).where(ProductListing.product_id == product_id)
+    items = list(db.scalars(stmt).all())
+    return items
