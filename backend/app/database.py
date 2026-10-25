@@ -2,10 +2,15 @@ import os
 from collections.abc import Generator
 from typing import Any
 
+from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
+
+# Load the project-root .env when running locally from the backend directory.
+# Existing process environment variables take precedence over values in the file.
+load_dotenv()
 
 
 def get_database_url() -> str:

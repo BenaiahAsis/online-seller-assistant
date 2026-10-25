@@ -70,6 +70,22 @@ A `.env.example` file is included in the project root. Create your local `.env` 
 cp .env.example .env
 ```
 
+On Windows PowerShell, run this from the repository root:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+If your terminal is already in `backend/`, use:
+
+```powershell
+Copy-Item ..\.env.example ..\.env
+```
+
+Then edit the `.env` in the repository root and set `DATABASE_URL` to the connection
+string for a running PostgreSQL database. The backend loads this project-root `.env`
+automatically when started from `backend/`.
+
 > **Security Note:** Never commit your actual `.env` file or place real secrets into version control. Real keys should only exist in your local `.env` or in deployment secret managers.
 
 ### Variables
@@ -106,6 +122,11 @@ Set your `DATABASE_URL` in `.env`:
 ```env
 DATABASE_URL=postgresql://postgres:password@localhost:5432/seller_db
 ```
+
+If `/health` returns `503` with `DATABASE_URL environment variable is not configured`,
+check that `.env` exists in the repository root and contains a non-empty `DATABASE_URL`.
+If it instead reports a connection error, verify PostgreSQL is running and that the
+database name, username, password, host, and port in the URL are correct.
 
 ---
 
