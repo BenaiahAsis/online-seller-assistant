@@ -71,3 +71,29 @@ def test_cors_headers_allowed_origin():
     assert response.headers.get("access-control-allow-origin") == (
         "http://localhost:5173"
     )
+
+
+def test_cors_headers_vercel_domain():
+    """Verify CORS headers are returned for hosted Vercel domain."""
+    response = client.get(
+        "/health",
+        headers={"Origin": "https://online-seller-assistant-three.vercel.app"},
+    )
+    assert response.headers.get("access-control-allow-origin") == (
+        "https://online-seller-assistant-three.vercel.app"
+    )
+
+
+def test_global_exception_handler_preserves_cors():
+    """Verify unhandled exceptions return 500 JSON with CORS headers preserved."""
+    test_client = TestClient(app, raise_server_exceptions=False)
+    response = test_client.get(
+        "/api/products",
+        headers={"Origin": "https://online-seller-assistant-three.vercel.app"},
+    )
+    assert response.status_code == 500
+    data = response.json()
+    assert "error" in data
+    assert response.headers.get("access-control-allow-origin") == (
+        "https://online-seller-assistant-three.vercel.app"
+    )

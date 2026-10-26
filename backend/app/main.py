@@ -1,12 +1,13 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.agents import (
     run_listing_generator_agent,
@@ -22,6 +23,8 @@ from app.schemas import (
     ProductListResponse,
     ProductResponse,
 )
+
+logger = logging.getLogger("uvicorn.error")
 
 
 @asynccontextmanager
@@ -46,7 +49,32 @@ allowed_origins = [
 if not allowed_origins:
     allowed_origins = ["http://localhost:5173"]
 
-# Enable CORS for frontend clients (supporting localhost and Vercel domains)
+
+@app.middleware("http")
+async def catch_exceptions_middleware(request: Request, call_next):
+    """Catch unhandled exceptions inside the CORS wrapper.
+
+    Ensures Access-Control-Allow-Origin headers are always attached.
+    """
+    try:
+        return await call_next(request)
+    except Exception as exc:
+        logger.error(
+            f"Unhandled server error on {request.method} {request.url.path}: {exc}",
+            exc_info=True,
+        )
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "error": "Internal Server Error",
+                "detail": str(exc),
+                "type": type(exc).__name__,
+            },
+        )
+
+
+# Enable CORS for frontend clients (added AFTER custom middleware so CORS
+# wraps all responses including 500 errors)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
@@ -55,6 +83,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Fallback exception handler for ASGI errors."""
+    logger.error(
+        f"Unhandled server error on {request.method} {request.url.path}: {exc}",
+        exc_info=True,
+    )
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "error": "Internal Server Error",
+            "detail": str(exc),
+            "type": type(exc).__name__,
+        },
+    )
 
 
 @app.get("/")
@@ -72,6 +117,8 @@ def health_check():
     db_status = check_database_connection()
 
     if db_status.get("connected"):
+        # Run schema migrations to ensure all tables and columns exist
+        init_db()
         return {
             "status": "healthy",
             "database": "connected",
@@ -124,7 +171,14 @@ def create_product(payload: ProductCreate, db: Annotated[Session, Depends(get_db
 )
 def list_products(db: Annotated[Session, Depends(get_db)]):
     """List all seller products with their current analysis status."""
-    stmt = select(Product).order_by(Product.created_at.desc())
+    stmt = (
+        select(Product)
+        .options(
+            selectinload(Product.analysis),
+            selectinload(Product.listings),
+        )
+        .order_by(Product.created_at.desc())
+    )
     items = list(db.scalars(stmt).all())
     return ProductListResponse(products=items, total=len(items))
 
@@ -136,7 +190,15 @@ def list_products(db: Annotated[Session, Depends(get_db)]):
 )
 def get_product(product_id: int, db: Annotated[Session, Depends(get_db)]):
     """Retrieve a single product and its structured profile."""
-    product = db.get(Product, product_id)
+    stmt = (
+        select(Product)
+        .options(
+            selectinload(Product.analysis),
+            selectinload(Product.listings),
+        )
+        .where(Product.id == product_id)
+    )
+    product = db.scalar(stmt)
     if not product:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

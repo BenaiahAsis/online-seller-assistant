@@ -62,16 +62,50 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def init_db() -> bool:
-    """Initialize database tables for models."""
+    """Initialize database tables for models and execute schema migrations."""
     engine = get_engine()
     if engine is None:
         return False
     try:
         from app.models import Base
 
+        # 1. Create tables if they do not exist
         Base.metadata.create_all(bind=engine)
+
+        # 2. Run safe schema migrations for newly added columns
+        with engine.connect() as conn:
+            if engine.dialect.name == "postgresql":
+                conn.execute(
+                    text(
+                        "ALTER TABLE product_analyses "
+                        "ADD COLUMN IF NOT EXISTS market_insights JSON;"
+                    )
+                )
+                conn.commit()
+            elif engine.dialect.name == "sqlite":
+                from sqlalchemy import inspect
+
+                inspector = inspect(engine)
+                if "product_analyses" in inspector.get_table_names():
+                    cols = [
+                        col["name"]
+                        for col in inspector.get_columns("product_analyses")
+                    ]
+                    if "market_insights" not in cols:
+                        conn.execute(
+                            text(
+                                "ALTER TABLE product_analyses "
+                                "ADD COLUMN market_insights JSON;"
+                            )
+                        )
+                        conn.commit()
         return True
-    except Exception:
+    except Exception as exc:
+        import logging
+
+        logging.getLogger("uvicorn.error").error(
+            f"Database initialization/migration error: {exc}", exc_info=True
+        )
         return False
 
 
