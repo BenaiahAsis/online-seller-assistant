@@ -1,6 +1,78 @@
-import json
+"""Agent 3 - Listing Generation Agent. Writes copy from Agent 1 and Agent 2."""
+
+from __future__ import annotations
+
 import os
-from typing import Any
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field, model_validator
+
+from app.agents.validation import (
+    PLACEHOLDER_KEYS,
+    build_corpus,
+    call_agent,
+    grounded,
+)
+
+PLATFORMS = ("shopee", "tiktok", "lazada")
+MODEL = "gpt-4o-mini"
+CURRENCY = "\u20b1"
+
+CHANNEL_TAGS = {
+    "shopee": ("shopeeph", "shopeefinds", "shopee"),
+    "tiktok": ("fyp", "foryou", "tiktokshopph"),
+    "lazada": ("lazadaph", "lazadafinds", "lazada"),
+}
+
+
+# ===========================================================================
+# Output contract
+# ===========================================================================
+
+
+class PlatformListing(BaseModel):
+    platform: Literal["shopee", "tiktok", "lazada"]
+    title: str = Field(min_length=10, max_length=255)
+    description: str = Field(min_length=40, max_length=3000)
+    bullet_points: list[str] = Field(min_length=2, max_length=6)
+    hashtags: list[str] = Field(min_length=3, max_length=10)
+    call_to_action: str = Field(min_length=5, max_length=255)
+
+
+class ListingBundle(BaseModel):
+    listings: list[PlatformListing] = Field(min_length=3, max_length=3)
+
+    @model_validator(mode="after")
+    def _one_per_platform(self) -> ListingBundle:
+        seen = [item.platform for item in self.listings]
+        if sorted(seen) != sorted(PLATFORMS):
+            raise ValueError(f"listings must cover {list(PLATFORMS)}, got {seen}")
+        return self
+
+
+SYSTEM = (
+    "You are Agent 3, the Listing Generation Agent. Agent 1 supplied the "
+    "product facts and Agent 2 the channel strategy. Write marketplace copy "
+    "using only what they gave you. Rephrase and arrange freely, but never "
+    "add a product fact, benefit, policy or statistic. Return JSON only."
+)
+
+
+# ===========================================================================
+# Fallback
+# ===========================================================================
+
+
+def _tags(keywords: list[str], platform: str, limit: int = 4) -> list[str]:
+    tokens: list[str] = []
+    for term in keywords:
+        token = "".join(c for c in str(term).lower() if c.isalnum())
+        if token and token not in tokens:
+            tokens.append(token)
+        if len(tokens) >= limit:
+            break
+    tokens += [t for t in CHANNEL_TAGS[platform][:2] if t not in tokens]
+    return [f"#{t}" for t in tokens]
 
 
 def _derive_fallback_listings(
@@ -12,158 +84,202 @@ def _derive_fallback_listings(
     selling_points: list[str] | None,
     keywords: list[str] | None,
 ) -> list[dict[str, Any]]:
-    """Generate platform-tailored listings deterministically without external API."""
-    bullets = selling_points or [
-        "Premium quality build and materials",
-        "Engineered for daily durability and optimal performance",
-        "Modern ergonomic styling suited for any workspace",
-    ]
-    raw_kw = keywords or ["bestseller", "quality", "newarrival"]
+    specs = [f"Price: {CURRENCY}{price:,.2f}"]
+    if category:
+        specs.append(f"Category: {category}")
+    if materials:
+        specs.append(f"Materials: {materials}")
+    if features:
+        specs.append(f"Details: {features}")
 
-    shopee_title = f"[Ready Stock] {name} - High Performance & Premium Quality"[:120]
-    shopee_bullets = bullets[:4]
-    shopee_desc = (
-        "🔥 READY STOCK | FAST SHIPPING | 100% BRAND NEW\n\n"
-        f"Product: {name}\n"
-        f"Price: ${price:.2f}\n"
-        f"Materials: {materials or 'Standard High-Grade Material'}\n\n"
-        "✨ KEY HIGHLIGHTS:\n"
-        + "\n".join([f"• {pt}" for pt in shopee_bullets])
-        + "\n\n📦 Package Includes:\n"
-        f"1x {name}, User Documentation\n\n"
-        "✅ 7-Day Replacement Guarantee for Factory Defects"
-    )
+    bullets = [str(p) for p in (selling_points or []) if str(p).strip()][:4]
+    if len(bullets) < 2:
+        bullets += specs
+    bullets = bullets[:4]
 
-    tiktok_title = f"The Must-Have {name} Everyone is Talking About! ✨"
-    tiktok_bullets = bullets[:3]
-    tiktok_desc = (
-        f"POV: You upgraded to the {name} and your routine is 10x better! 😍\n\n"
-        + "\n".join([f"👉 {pt}" for pt in tiktok_bullets])
-        + f"\n\nOnly ${price:.2f}! Limited stock available.\n"
-        "Tap the yellow basket to get yours today! 🛒👇"
-    )
+    terms = [str(k) for k in (keywords or []) if str(k).strip()]
+    if not terms:
+        terms = [w for w in name.lower().split() if len(w) > 3][:3]
 
-    lazada_title = (
-        f"{name} - Official Store Quality ({category or 'General Merchandise'})"
-    )
-    lazada_bullets = bullets[:4]
-    lazada_desc = (
-        "GUARANTEED AUTHENTIC & TESTED BEFORE SHIPPING\n\n"
-        f"{name} delivers reliable performance and exceptional value.\n\n"
-        "SPECIFICATIONS & FEATURES:\n"
-        + "\n".join([f"- {pt}" for pt in lazada_bullets])
-        + f"\n- Materials: {materials or 'High-grade commercial build'}\n"
-        f"- Detailed Notes: {features or 'Quality-tested componentry'}\n\n"
-        "Claim store vouchers before checkout for extra savings!"
-    )
+    spec_block = "\n".join(specs)
+    bullet_block = "\n".join(f"- {b}" for b in bullets)
+    note = "All details above come from the seller's product information."
 
     return [
         {
             "platform": "shopee",
-            "title": shopee_title,
-            "description": shopee_desc,
-            "bullet_points": shopee_bullets,
-            "hashtags": [f"#{k.replace(' ', '')}" for k in raw_kw[:5]]
-            + ["#shopeeph", "#bestseller"],
-            "call_to_action": "Order today for fast dispatch! Limited stock.",
+            "title": f"{name} - {category or 'Product Listing'}"[:255],
+            "description": (
+                f"{name}\n\n{spec_block}\n\nWhat the seller lists:\n"
+                f"{bullet_block}\n\n{note}"
+            ),
+            "bullet_points": bullets,
+            "hashtags": _tags(terms, "shopee"),
+            "call_to_action": "Check the specifications and add to cart.",
+            "source": "heuristic",
         },
         {
             "platform": "tiktok",
-            "title": tiktok_title,
-            "description": tiktok_desc,
-            "bullet_points": tiktok_bullets,
-            "hashtags": [f"#{k.replace(' ', '')}" for k in raw_kw[:4]]
-            + ["#tiktokmademebuyit", "#techtok", "#fyp"],
-            "call_to_action": "Tap the yellow basket before it sells out!",
+            "title": f"{name} - what it is and what it costs"[:255],
+            "description": (
+                f"{name} - here is what it actually is.\n\n{bullet_block}\n\n"
+                f"Priced at {CURRENCY}{price:,.2f}. {note}"
+            ),
+            "bullet_points": bullets[:3],
+            "hashtags": _tags(terms, "tiktok", limit=3),
+            "call_to_action": "Tap the basket to see the full details.",
+            "source": "heuristic",
         },
         {
             "platform": "lazada",
-            "title": lazada_title,
-            "description": lazada_desc,
-            "bullet_points": lazada_bullets,
-            "hashtags": [f"#{k.replace(' ', '')}" for k in raw_kw[:5]]
-            + ["#lazadaph", "#qualityguaranteed"],
-            "call_to_action": "Add to cart now and claim your vouchers at checkout!",
+            "title": f"{name} - {category or 'Product'} specifications"[:255],
+            "description": (
+                f"{name}\n\nSpecifications\n{spec_block}\n\nListed features\n"
+                f"{bullet_block}\n\n{note}"
+            ),
+            "bullet_points": bullets,
+            "hashtags": _tags(terms, "lazada"),
+            "call_to_action": "Add to cart to review the full specifications.",
+            "source": "heuristic",
         },
     ]
+
+
+# ===========================================================================
+# Validation checks
+# ===========================================================================
+
+
+def _make_checks(sources: list[str], keywords: list[str]):
+    tokens = {
+        "".join(c for c in str(k).lower() if c.isalnum()) for k in keywords if str(k)
+    }
+
+    def checks(bundle: ListingBundle) -> list[str]:
+        problems = []
+        for listing in bundle.listings:
+            for i, bullet in enumerate(listing.bullet_points):
+                if not grounded(bullet, sources):
+                    problems.append(
+                        f"{listing.platform}.bullet_points.{i} is not in the "
+                        f"product data: '{bullet}'"
+                    )
+            for tag in listing.hashtags:
+                token = "".join(c for c in tag.lower() if c.isalnum())
+                if token in CHANNEL_TAGS[listing.platform]:
+                    continue
+                if any(t and t in token for t in tokens):
+                    continue
+                problems.append(
+                    f"{listing.platform}.hashtags '{tag}' is not an Agent 1 "
+                    "keyword or an approved channel tag"
+                )
+        return problems
+
+    return checks
+
+
+# ===========================================================================
+# Entry point
+# ===========================================================================
+
+
+def _client() -> Any | None:
+    key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not key or key in PLACEHOLDER_KEYS:
+        return None
+    from openai import OpenAI
+
+    return OpenAI(api_key=key)
+
+
+def _strategy_brief(market: dict[str, Any]) -> str:
+    strategies = market.get("platform_strategies") or {}
+    lines = []
+    for platform in PLATFORMS:
+        entry = strategies.get(platform) or {}
+        lines.append(
+            f"  {platform}: focus={entry.get('focus', 'n/a')}; "
+            f"tone={entry.get('tone', 'n/a')}; angle={entry.get('angle', 'n/a')}"
+        )
+    return "\n".join(lines)
 
 
 def run_listing_generator_agent(
     product_data: dict[str, Any],
     analysis_data: dict[str, Any],
     market_data: dict[str, Any] | None = None,
+    client: Any | None = None,
 ) -> list[dict[str, Any]]:
-    """Execute Agent 3 (Listing Generation Agent).
-
-    Generates tailored marketplace listings for Shopee, TikTok Shop, and Lazada.
-    """
-    name = product_data.get("name", "Product")
+    name = str(product_data.get("name", "Product"))
     price = float(product_data.get("price", 0.0))
     materials = product_data.get("materials")
     features = product_data.get("features")
-
     category = analysis_data.get("category")
-    selling_points = analysis_data.get("selling_points") or []
-    keywords = analysis_data.get("suggested_keywords") or []
+    points = [str(p) for p in (analysis_data.get("selling_points") or [])]
+    keywords = [str(k) for k in (analysis_data.get("suggested_keywords") or [])]
+    market = market_data or {}
 
     fallback = _derive_fallback_listings(
-        name=name,
-        price=price,
-        materials=materials,
-        features=features,
-        category=category,
-        selling_points=selling_points,
-        keywords=keywords,
+        name, price, materials, features, category, points, keywords
     )
 
-    api_key = os.getenv("OPENAI_API_KEY", "").strip()
-    if not api_key or api_key in {"not-set-yet", "mock", "placeholder"}:
+    client = client or _client()
+    if client is None:
         return fallback
 
-    try:
-        from openai import OpenAI
+    ranked = [
+        str(item.get("point", "")).strip()
+        for item in (market.get("priority_points") or [])
+        if str(item.get("point", "")).strip()
+    ] or points
 
-        client = OpenAI(api_key=api_key)
-        prompt = (
-            "You are an expert e-commerce copywriter (Agent 3).\n"
-            "Generate 3 platform-tailored listings (Shopee, TikTok, Lazada) "
-            "based on the product specs and market intelligence.\n\n"
-            f"Product: {name}\n"
-            f"Price: ${price:.2f}\n"
-            f"Materials: {materials}\n"
-            f"Features: {features}\n"
-            f"Category: {category}\n"
-            f"Selling Points: {selling_points}\n"
-            f"SEO Keywords: {keywords}\n"
-            f"Market Intelligence: {market_data or {}}\n\n"
-            "Return JSON object with key 'listings' containing 3 items:\n"
-            "- platform: 'shopee' | 'tiktok' | 'lazada'\n"
-            "- title: str\n"
-            "- description: str\n"
-            "- bullet_points: list[str]\n"
-            "- hashtags: list[str]\n"
-            "- call_to_action: str"
-        )
+    sources = [*ranked, *points, name, str(materials or ""), str(features or "")]
+    corpus = build_corpus(name, materials, features, category, points, keywords, ranked)
+    numbered = "\n".join(f"  {i + 1}. {t}" for i, t in enumerate(ranked)) or "  (none)"
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a copywriter returning valid JSON only.",
-                },
-                {"role": "user", "content": prompt},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.4,
-        )
+    prompt = (
+        "Write one listing each for Shopee, TikTok Shop and Lazada using only "
+        "the material below.\n\n"
+        f"Product: {name}\n"
+        f"Price: {CURRENCY}{price:,.2f}\n"
+        f"Category: {category or 'unspecified'}\n"
+        f"Materials: {materials or 'not supplied'}\n"
+        f"Seller notes: {features or 'not supplied'}\n\n"
+        f"Selling points ranked by Agent 2:\n{numbered}\n\n"
+        f"Price tier: {market.get('price_tier', 'unspecified')}\n"
+        f"Channel strategy:\n{_strategy_brief(market)}\n\n"
+        f"Approved keywords: {', '.join(keywords) or '(none)'}\n\n"
+        "- Every bullet point must rephrase a ranked selling point above.\n"
+        "- Hashtags come from the approved keywords plus at most two channel "
+        "tags per platform.\n"
+        "- Match each platform's tone and angle.\n"
+        "- Never state a warranty, return policy, authenticity, "
+        "certification, package contents, product condition, shipping offer, "
+        "stock urgency or comparison to another product.\n"
+        "- If a detail is not above, leave it out."
+    )
 
-        content = response.choices[0].message.content or "{}"
-        parsed = json.loads(content)
-        raw_listings = parsed.get("listings")
+    bundle, errors = call_agent(
+        client=client,
+        model=MODEL,
+        system=SYSTEM,
+        prompt=prompt,
+        schema_model=ListingBundle,
+        corpus=corpus,
+        temperature=0.6,
+        max_tokens=2200,
+        checks=_make_checks(sources, keywords),
+    )
 
-        if isinstance(raw_listings, list) and len(raw_listings) >= 3:
-            return raw_listings
+    if bundle is None:
+        for listing in fallback:
+            listing["fallback_reason"] = errors
         return fallback
-    except Exception:
-        return fallback
+
+    results = []
+    for listing in bundle.listings:
+        payload = listing.model_dump()
+        payload["source"] = "ai"
+        results.append(payload)
+    return results
