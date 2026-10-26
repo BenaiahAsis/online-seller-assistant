@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import ListingPreview from './components/ListingPreview';
 
 const SAMPLE_PRODUCTS = [
   {
@@ -40,8 +41,13 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [analyzingId, setAnalyzingId] = useState(null);
+  const [runningPipelineId, setRunningPipelineId] = useState(null);
   const [notification, setNotification] = useState(null);
   const [copiedKeyword, setCopiedKeyword] = useState(null);
+
+  // Sprint 3 State: Platform Selector & Clipboard Copy State
+  const [selectedPlatform, setSelectedPlatform] = useState('shopee'); // 'shopee' | 'tiktok' | 'lazada'
+  const [copied, setCopied] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -98,19 +104,31 @@ export default function App() {
       });
       if (response.ok) {
         const data = await response.json();
-        setProducts(data.products || []);
-        // If nothing is selected, default to the latest analyzed product
-        if (!selectedProduct && data.products && data.products.length > 0) {
-          const firstWithAnalysis = data.products.find((p) => p.analysis);
-          setSelectedProduct(firstWithAnalysis || data.products[0]);
-        }
+        const incomingProducts = data.products || [];
+        setProducts(incomingProducts);
+
+        // Keep selectedProduct synchronized or select the best initial product
+        setSelectedProduct((current) => {
+          if (!current && incomingProducts.length > 0) {
+            return (
+              incomingProducts.find((p) => p.listings && p.listings.length > 0) ||
+              incomingProducts.find((p) => p.analysis) ||
+              incomingProducts[0]
+            );
+          }
+          if (current) {
+            const fresh = incomingProducts.find((p) => p.id === current.id);
+            if (fresh) return fresh;
+          }
+          return current;
+        });
       }
     } catch (err) {
       console.warn('Unable to load product list:', err);
     } finally {
       setProductsLoading(false);
     }
-  }, [productsEndpoint, selectedProduct]);
+  }, [productsEndpoint]);
 
   useEffect(() => {
     fetchHealth();
@@ -179,10 +197,10 @@ export default function App() {
       setSelectedProduct(analyzedProduct);
       setNotification({
         type: 'success',
-        message: `Product "${analyzedProduct.name}" created and analyzed by Agent 1!`,
+        message: `Product created & analyzed by Agent 1! (${analyzedProduct.analysis?.category || 'Ready'})`,
       });
 
-      // Clear form and refresh catalog
+      // Reset form
       setFormData({
         name: '',
         price: '',
@@ -190,11 +208,12 @@ export default function App() {
         materials: '',
         features: '',
       });
+
       await fetchProducts();
     } catch (err) {
       setNotification({
         type: 'error',
-        message: err instanceof Error ? err.message : 'Operation failed.',
+        message: err instanceof Error ? err.message : 'Failed to submit and analyze product',
       });
     } finally {
       setSubmitting(false);
@@ -202,7 +221,7 @@ export default function App() {
     }
   };
 
-  // Trigger analysis for an existing product in the catalog
+  // Trigger analysis for an existing product in the catalog (Agent 1)
   const handleRunAnalysis = async (productId) => {
     setAnalyzingId(productId);
     setNotification(null);
@@ -232,6 +251,93 @@ export default function App() {
     }
   };
 
+  // Sprint 3: Trigger full 3-agent autonomous pipeline (Agent 1 -> Agent 2 -> Agent 3)
+  const handleRunFullPipeline = async (productId) => {
+    setRunningPipelineId(productId);
+    setNotification(null);
+    try {
+      const res = await fetch(`${productsEndpoint}/${productId}/full-pipeline`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.detail || `Failed to run full pipeline (${res.status})`);
+      }
+      const data = await res.json();
+      setSelectedProduct(data.product);
+      setNotification({
+        type: 'success',
+        message: 'Full 3-agent pipeline completed successfully! Shopee, TikTok Shop, and Lazada listings ready.',
+      });
+      await fetchProducts();
+    } catch (err) {
+      setNotification({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Failed to run full pipeline',
+      });
+    } finally {
+      setRunningPipelineId(null);
+    }
+  };
+
+  // Submit and immediately trigger full 3-agent pipeline
+  const handleCreateAndRunFullPipeline = async (e) => {
+    if (e) e.preventDefault();
+    if (!formData.name.trim() || !formData.price) {
+      setNotification({
+        type: 'error',
+        message: 'Product name and price are required.',
+      });
+      return;
+    }
+
+    setSubmitting(true);
+    setNotification(null);
+
+    try {
+      // Step 1: Create Product
+      const createRes = await fetch(productsEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name.trim(),
+          price: parseFloat(formData.price),
+          quantity: parseInt(formData.quantity, 10) || 1,
+          materials: formData.materials.trim() || null,
+          features: formData.features.trim() || null,
+        }),
+      });
+
+      if (!createRes.ok) {
+        const errData = await createRes.json().catch(() => null);
+        throw new Error(errData?.detail || `Failed to create product (${createRes.status})`);
+      }
+
+      const createdProduct = await createRes.json();
+      setSelectedProduct(createdProduct);
+
+      // Reset form
+      setFormData({
+        name: '',
+        price: '',
+        quantity: '1',
+        materials: '',
+        features: '',
+      });
+
+      // Step 2: Trigger Full Pipeline
+      await handleRunFullPipeline(createdProduct.id);
+    } catch (err) {
+      setNotification({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Pipeline execution failed',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleCopyKeyword = (kw) => {
     navigator.clipboard?.writeText(kw);
     setCopiedKeyword(kw);
@@ -243,77 +349,82 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       {/* Top Navbar */}
-      <nav className="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center font-black text-white text-base shadow-md shadow-indigo-500/20">
-              AI
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-500 flex items-center justify-center font-black text-white shadow-lg shadow-indigo-500/30">
+              ⚡
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-white text-base tracking-tight">
-                  Online Seller Assistant
-                </span>
-                <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                  Sprint 2
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 hidden sm:block">
-                Autonomous AI agents for multi-channel e-commerce sellers
-              </p>
+              <span className="font-extrabold text-base sm:text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent block leading-tight">
+                Online Seller Assistant
+              </span>
+              <span className="text-[11px] text-slate-400 font-mono">
+                Sprint 3 &bull; Multi-Agent Listing Studio
+              </span>
             </div>
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex items-center gap-2 bg-slate-950/80 p-1 rounded-xl border border-slate-800">
+          <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => setActiveTab('assistant')}
-              className={`px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 activeTab === 'assistant'
-                  ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
-              Agent 1: Product Analyzer
+              🤖 AI Studio
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('devops')}
-              className={`inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
                 activeTab === 'devops'
-                  ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
-              <span>System Health</span>
               <span
                 className={`w-2 h-2 rounded-full ${
-                  isHealthy ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-rose-500'
+                  healthLoading
+                    ? 'bg-amber-400 animate-pulse'
+                    : isHealthy
+                    ? 'bg-emerald-400'
+                    : 'bg-rose-400'
                 }`}
               />
+              <span>DevOps Health</span>
             </button>
           </div>
         </div>
-      </nav>
+      </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
-        {/* Notification Toast */}
+      {/* Main Body */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {/* Global Floating Toast / Notification */}
         {notification && (
           <div
-            className={`flex items-center justify-between gap-3 p-3.5 rounded-xl border text-sm transition-all shadow-lg ${
+            className={`p-3.5 rounded-xl border flex items-center justify-between text-xs sm:text-sm font-medium transition-all shadow-lg ${
               notification.type === 'success'
-                ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-200'
-                : notification.type === 'error'
-                ? 'bg-rose-950/40 border-rose-800/60 text-rose-200'
-                : 'bg-indigo-950/40 border-indigo-800/60 text-indigo-200'
+                ? 'bg-emerald-950/60 border-emerald-700/60 text-emerald-200'
+                : notification.type === 'info'
+                ? 'bg-indigo-950/60 border-indigo-700/60 text-indigo-200'
+                : 'bg-rose-950/60 border-rose-700/60 text-rose-200'
             }`}
           >
-            <div className="flex items-center gap-2 font-medium">
+            <div className="flex items-center gap-2">
+              <span className="text-base">
+                {notification.type === 'success' ? '✓' : notification.type === 'info' ? 'ℹ' : '⚠'}
+              </span>
               <span>{notification.message}</span>
             </div>
             <button
+              type="button"
               onClick={() => setNotification(null)}
-              className="text-xs uppercase tracking-wider font-semibold opacity-70 hover:opacity-100"
+              className="text-xs text-slate-400 hover:text-white ml-3 underline"
             >
               Dismiss
             </button>
@@ -322,7 +433,7 @@ export default function App() {
 
         {activeTab === 'assistant' ? (
           /* ========================================================================= */
-          /* SPRINT 2: PRODUCT ANALYZER AGENT WORKBENCH                                */
+          /* SPRINT 3: MULTI-AGENT E-COMMERCE LISTING STUDIO                            */
           /* ========================================================================= */
           <div className="space-y-6">
             {/* Top Overview Banner */}
@@ -331,14 +442,13 @@ export default function App() {
                 <div className="space-y-1">
                   <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-indigo-400">
                     <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
-                    Autonomous Pipeline &bull; Agent 1
+                    Autonomous Multi-Agent Pipeline &bull; Sprint 3
                   </div>
                   <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                    Product Analysis & Structure Agent
+                    Multi-Agent E-Commerce Listing Studio
                   </h1>
                   <p className="text-sm text-slate-300 max-w-2xl">
-                    Input raw product specifications. Agent 1 extracts the target market,
-                    key selling points, specifications, and high-impact SEO keywords for downstream marketing agents.
+                    Input raw product details to trigger our sequential 3-agent pipeline: Product Analysis (Agent 1), Market Positioning (Agent 2), and Tailored Listings for Shopee, TikTok Shop, and Lazada (Agent 3).
                   </p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
@@ -368,29 +478,32 @@ export default function App() {
               </div>
             </div>
 
-            {/* Two-Column Grid: Form + Analysis Display */}
+            {/* Two-Column Grid: Form + Analysis/Listings Display */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Left Column: Seller Input Form (5 cols) */}
-              <div className="lg:col-span-5 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-lg flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
-                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                      <span>Seller Input Form</span>
+              <div className="lg:col-span-5 space-y-6">
+                <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-lg space-y-4">
+                  <div className="border-b border-slate-800 pb-3">
+                    <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                      <span>📝</span>
+                      <span>Raw Product Input Form</span>
                     </h2>
-                    <span className="text-xs font-mono text-slate-500">POST /api/products</span>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Enter unorganized product notes or select a sample above.
+                    </p>
                   </div>
 
                   <form onSubmit={handleCreateAndAnalyze} className="space-y-4">
-                    {/* Product Name */}
-                    <div>
-                      <label htmlFor="product-name" className="block text-xs font-medium uppercase tracking-wider text-slate-400 mb-1">
-                        Product Name <span className="text-rose-400">*</span>
+                    {/* Name */}
+                    <div className="space-y-1">
+                      <label htmlFor="product-name" className="text-xs font-semibold text-slate-300 block">
+                        Product Title / Name <span className="text-rose-400">*</span>
                       </label>
                       <input
                         id="product-name"
                         type="text"
                         required
-                        placeholder="e.g. Ergonomic Bamboo Wireless Keyboard"
+                        placeholder="e.g. Ergonomic Bluetooth Mechanical Keyboard"
                         value={formData.name}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
@@ -399,8 +512,8 @@ export default function App() {
 
                     {/* Price & Quantity Grid */}
                     <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label htmlFor="product-price" className="block text-xs font-medium uppercase tracking-wider text-slate-400 mb-1">
+                      <div className="space-y-1">
+                        <label htmlFor="product-price" className="text-xs font-semibold text-slate-300 block">
                           Price ($) <span className="text-rose-400">*</span>
                         </label>
                         <input
@@ -409,20 +522,21 @@ export default function App() {
                           step="0.01"
                           min="0.01"
                           required
-                          placeholder="49.99"
+                          placeholder="29.99"
                           value={formData.price}
                           onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                           className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                         />
                       </div>
-                      <div>
-                        <label htmlFor="product-stock" className="block text-xs font-medium uppercase tracking-wider text-slate-400 mb-1">
+                      <div className="space-y-1">
+                        <label htmlFor="product-quantity" className="text-xs font-semibold text-slate-300 block">
                           Stock Quantity
                         </label>
                         <input
-                          id="product-stock"
+                          id="product-quantity"
                           type="number"
                           min="1"
+                          required
                           value={formData.quantity}
                           onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
                           className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
@@ -431,24 +545,24 @@ export default function App() {
                     </div>
 
                     {/* Materials */}
-                    <div>
-                      <label htmlFor="product-materials" className="block text-xs font-medium uppercase tracking-wider text-slate-400 mb-1">
-                        Materials & Build
+                    <div className="space-y-1">
+                      <label htmlFor="product-materials" className="text-xs font-semibold text-slate-300 block">
+                        Materials / Composition
                       </label>
                       <input
                         id="product-materials"
                         type="text"
-                        placeholder="e.g. Natural bamboo wood, recycled ABS plastics"
+                        placeholder="e.g. 100% Cotton, Aluminum alloy, BPA-free plastic"
                         value={formData.materials}
                         onChange={(e) => setFormData({ ...formData, materials: e.target.value })}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                       />
                     </div>
 
-                    {/* Features / Raw Description */}
-                    <div>
-                      <label htmlFor="product-features" className="block text-xs font-medium uppercase tracking-wider text-slate-400 mb-1">
-                        Raw Features & Notes
+                    {/* Features / Raw Specs */}
+                    <div className="space-y-1">
+                      <label htmlFor="product-features" className="text-xs font-semibold text-slate-300 block">
+                        Raw Features &amp; Notes
                       </label>
                       <textarea
                         id="product-features"
@@ -460,206 +574,255 @@ export default function App() {
                       />
                     </div>
 
-                    {/* Submit Button */}
-                    <button
-                      type="submit"
-                      disabled={submitting || analyzingId !== null}
-                      className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm transition-all bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-lg shadow-indigo-600/30"
-                    >
-                      {submitting ? (
-                        <>
-                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                          </svg>
-                          <span>Creating & Analyzing with Agent 1...</span>
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                          </svg>
-                          <span>Submit & Run AI Agent 1</span>
-                        </>
-                      )}
-                    </button>
+                    {/* Dual Action Buttons: Run Agent 1 or Run Full Pipeline */}
+                    <div className="space-y-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={handleCreateAndRunFullPipeline}
+                        disabled={submitting || analyzingId !== null || runningPipelineId !== null}
+                        className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold text-xs sm:text-sm transition-all bg-gradient-to-r from-amber-500 via-indigo-600 to-indigo-700 hover:from-amber-400 hover:to-indigo-600 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-lg shadow-indigo-600/30"
+                      >
+                        {submitting || runningPipelineId !== null ? (
+                          <>
+                            <svg className="animate-spin -ml-1 mr-1 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            <span>Executing 3-Agent Pipeline...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>⚡ Submit &amp; Run Full Pipeline (All 3 Agents)</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="submit"
+                        disabled={submitting || analyzingId !== null || runningPipelineId !== null}
+                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-xs transition-all bg-slate-800 hover:bg-slate-700 active:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {analyzingId !== null ? (
+                          <span>Analyzing with Agent 1...</span>
+                        ) : (
+                          <span>Or Submit &amp; Run Agent 1 Only</span>
+                        )}
+                      </button>
+                    </div>
                   </form>
                 </div>
               </div>
 
-              {/* Right Column: AI Analysis Card (7 cols) */}
-              <div className="lg:col-span-7 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-lg flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
-                      <h2 className="text-lg font-bold text-white">Agent 1: Structured Output</h2>
+              {/* Right Column: Structured Analysis & Listings (7 cols) */}
+              <div className="lg:col-span-7 space-y-6">
+                {/* Product Analysis Card (Agent 1) */}
+                <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-lg flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
+                        <h2 className="text-lg font-bold text-white">Agent 1: Structured Profile</h2>
+                      </div>
+                      {selectedProduct && (
+                        <span
+                          className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
+                            selectedProduct.status === 'completed'
+                              ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30'
+                              : selectedProduct.status === 'analyzed'
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                              : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                          }`}
+                        >
+                          {selectedProduct.status === 'completed'
+                            ? '⚡ 3-Agent Pipeline Done'
+                            : selectedProduct.status === 'analyzed'
+                            ? 'AI Analyzed'
+                            : 'Draft'}
+                        </span>
+                      )}
                     </div>
-                    {selectedProduct && (
-                      <span
-                        className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
-                          selectedProduct.status === 'analyzed'
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                            : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                        }`}
-                      >
-                        {selectedProduct.status === 'analyzed' ? 'AI Analyzed' : 'Draft'}
-                      </span>
+
+                    {selectedProduct ? (
+                      <div className="space-y-5">
+                        {/* Product Header Info */}
+                        <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div>
+                            <span className="text-xs text-slate-400 font-mono">ID #{selectedProduct.id}</span>
+                            <h3 className="text-base sm:text-lg font-bold text-white">{selectedProduct.name}</h3>
+                            <div className="flex items-center gap-3 text-xs text-slate-400 mt-1">
+                              <span>Price: <strong className="text-emerald-400 font-mono">${Number(selectedProduct.price).toFixed(2)}</strong></span>
+                              <span>&bull;</span>
+                              <span>Stock: <strong className="text-slate-200 font-mono">{selectedProduct.quantity} units</strong></span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => handleRunFullPipeline(selectedProduct.id)}
+                              disabled={runningPipelineId === selectedProduct.id}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-400 hover:to-indigo-500 text-white shadow transition-all disabled:opacity-50"
+                            >
+                              {runningPipelineId === selectedProduct.id ? (
+                                'Running Pipeline...'
+                              ) : (
+                                '⚡ Full Pipeline'
+                              )}
+                            </button>
+
+                            {selectedProduct.status !== 'analyzed' && selectedProduct.status !== 'completed' && (
+                              <button
+                                type="button"
+                                onClick={() => handleRunAnalysis(selectedProduct.id)}
+                                disabled={analyzingId === selectedProduct.id}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow transition-all disabled:opacity-50"
+                              >
+                                {analyzingId === selectedProduct.id ? 'Analyzing...' : 'Run Agent 1'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Structured Analysis Content */}
+                        {selectedProduct.analysis ? (
+                          <div className="space-y-4">
+                            {/* Category & Target Audience */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-1">
+                                <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
+                                  Inferred Category
+                                </span>
+                                <span className="inline-block text-sm font-semibold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-1 rounded-lg">
+                                  {selectedProduct.analysis.category || 'General Merchandise'}
+                                </span>
+                              </div>
+
+                              <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-1">
+                                <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
+                                  Target Audience
+                                </span>
+                                <span className="text-sm text-slate-200">
+                                  {selectedProduct.analysis.target_audience || 'Everyday consumers'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Key Selling Points */}
+                            {selectedProduct.analysis.selling_points && selectedProduct.analysis.selling_points.length > 0 && (
+                              <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-2">
+                                <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
+                                  Key Selling Points (Value Propositions)
+                                </span>
+                                <ul className="space-y-1.5 text-xs sm:text-sm text-slate-300">
+                                  {selectedProduct.analysis.selling_points.map((point, idx) => (
+                                    <li key={idx} className="flex items-start gap-2">
+                                      <svg className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+                                      </svg>
+                                      <span>{point}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* Suggested SEO Keywords */}
+                            {selectedProduct.analysis.suggested_keywords && selectedProduct.analysis.suggested_keywords.length > 0 && (
+                              <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+                                    Suggested SEO Keywords (Click to copy)
+                                  </span>
+                                  {copiedKeyword && (
+                                    <span className="text-[11px] text-emerald-400 font-medium">Copied &ldquo;{copiedKeyword}&rdquo;!</span>
+                                  )}
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {selectedProduct.analysis.suggested_keywords.map((kw, idx) => (
+                                    <button
+                                      key={idx}
+                                      type="button"
+                                      onClick={() => handleCopyKeyword(kw)}
+                                      className="text-xs bg-slate-900 hover:bg-slate-800 text-indigo-300 hover:text-white border border-slate-800 hover:border-indigo-500/50 px-2.5 py-1 rounded-md transition-colors font-mono"
+                                    >
+                                      #{kw}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Specifications / Raw Summary */}
+                            {selectedProduct.analysis.raw_summary && (
+                              <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-1">
+                                <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
+                                  Agent Synthesis Summary
+                                </span>
+                                <p className="text-xs text-slate-300 leading-relaxed font-mono">
+                                  {selectedProduct.analysis.raw_summary}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-center py-10 space-y-3 bg-slate-950/40 rounded-xl border border-slate-800 border-dashed">
+                            <p className="text-sm text-slate-400">
+                              This product has not been analyzed yet.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => handleRunAnalysis(selectedProduct.id)}
+                              disabled={analyzingId === selectedProduct.id}
+                              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow"
+                            >
+                              Run Agent 1 Analysis Now
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      /* Empty State */
+                      <div className="text-center py-12 space-y-4 bg-slate-950/30 rounded-xl border border-slate-800/80 border-dashed p-6">
+                        <div className="w-12 h-12 mx-auto rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                          </svg>
+                        </div>
+                        <div className="space-y-1">
+                          <h4 className="text-base font-bold text-white">No Product Selected</h4>
+                          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                            Submit a product using the form or select one from the catalog below to inspect Agent 1&apos;s output.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleLoadSample(0)}
+                          className="text-xs text-indigo-400 hover:text-indigo-300 font-medium underline underline-offset-4"
+                        >
+                          Load demo sample into form
+                        </button>
+                      </div>
                     )}
                   </div>
 
-                  {selectedProduct ? (
-                    <div className="space-y-5">
-                      {/* Product Header Info */}
-                      <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div>
-                          <span className="text-xs text-slate-400 font-mono">ID #{selectedProduct.id}</span>
-                          <h3 className="text-base sm:text-lg font-bold text-white">{selectedProduct.name}</h3>
-                          <div className="flex items-center gap-3 text-xs text-slate-400 mt-1">
-                            <span>Price: <strong className="text-emerald-400 font-mono">${Number(selectedProduct.price).toFixed(2)}</strong></span>
-                            <span>&bull;</span>
-                            <span>Stock: <strong className="text-slate-200 font-mono">{selectedProduct.quantity} units</strong></span>
-                          </div>
-                        </div>
-
-                        {selectedProduct.status !== 'analyzed' && (
-                          <button
-                            type="button"
-                            onClick={() => handleRunAnalysis(selectedProduct.id)}
-                            disabled={analyzingId === selectedProduct.id}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow transition-all disabled:opacity-50"
-                          >
-                            {analyzingId === selectedProduct.id ? 'Analyzing...' : 'Run Agent 1 Now'}
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Structured Analysis Content */}
-                      {selectedProduct.analysis ? (
-                        <div className="space-y-4">
-                          {/* Category & Target Audience */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-1">
-                              <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
-                                Inferred Category
-                              </span>
-                              <span className="inline-block text-sm font-semibold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-1 rounded-lg">
-                                {selectedProduct.analysis.category || 'General Merchandise'}
-                              </span>
-                            </div>
-
-                            <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-1">
-                              <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
-                                Target Audience
-                              </span>
-                              <span className="text-sm text-slate-200">
-                                {selectedProduct.analysis.target_audience || 'Everyday consumers'}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Key Selling Points */}
-                          {selectedProduct.analysis.selling_points && selectedProduct.analysis.selling_points.length > 0 && (
-                            <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-2">
-                              <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
-                                Key Selling Points (Value Propositions)
-                              </span>
-                              <ul className="space-y-1.5 text-xs sm:text-sm text-slate-300">
-                                {selectedProduct.analysis.selling_points.map((point, idx) => (
-                                  <li key={idx} className="flex items-start gap-2">
-                                    <svg className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
-                                    </svg>
-                                    <span>{point}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-
-                          {/* Suggested SEO Keywords */}
-                          {selectedProduct.analysis.suggested_keywords && selectedProduct.analysis.suggested_keywords.length > 0 && (
-                            <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-2">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
-                                  Suggested SEO Keywords (Click to copy)
-                                </span>
-                                {copiedKeyword && (
-                                  <span className="text-[11px] text-emerald-400 font-medium">Copied &ldquo;{copiedKeyword}&rdquo;!</span>
-                                )}
-                              </div>
-                              <div className="flex flex-wrap gap-1.5">
-                                {selectedProduct.analysis.suggested_keywords.map((kw, idx) => (
-                                  <button
-                                    key={idx}
-                                    type="button"
-                                    onClick={() => handleCopyKeyword(kw)}
-                                    className="text-xs bg-slate-900 hover:bg-slate-800 text-indigo-300 hover:text-white border border-slate-800 hover:border-indigo-500/50 px-2.5 py-1 rounded-md transition-colors font-mono"
-                                  >
-                                    #{kw}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Specifications / Raw Summary */}
-                          {selectedProduct.analysis.raw_summary && (
-                            <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-1">
-                              <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
-                                Agent Synthesis Summary
-                              </span>
-                              <p className="text-xs text-slate-300 leading-relaxed font-mono">
-                                {selectedProduct.analysis.raw_summary}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-center py-10 space-y-3 bg-slate-950/40 rounded-xl border border-slate-800 border-dashed">
-                          <p className="text-sm text-slate-400">
-                            This product has not been analyzed yet.
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => handleRunAnalysis(selectedProduct.id)}
-                            disabled={analyzingId === selectedProduct.id}
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow"
-                          >
-                            Run Agent 1 Analysis Now
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    /* Empty State */
-                    <div className="text-center py-12 space-y-4 bg-slate-950/30 rounded-xl border border-slate-800/80 border-dashed p-6">
-                      <div className="w-12 h-12 mx-auto rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                        </svg>
-                      </div>
-                      <div className="space-y-1">
-                        <h4 className="text-base font-bold text-white">No Product Selected</h4>
-                        <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                          Submit a product using the form or select one from the catalog below to inspect Agent 1&apos;s output.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleLoadSample(0)}
-                        className="text-xs text-indigo-400 hover:text-indigo-300 font-medium underline underline-offset-4"
-                      >
-                        Load demo sample into form
-                      </button>
-                    </div>
-                  )}
+                  <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-500">
+                    <span>Engine: Multi-Agent AI (OpenAI GPT-4o-mini &amp; Deterministic Fallback)</span>
+                    <span>PostgreSQL (Neon)</span>
+                  </div>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-500">
-                  <span>Engine: OpenAI GPT-4o-mini &amp; Deterministic Rule Fallback</span>
-                  <span>PostgreSQL (Neon)</span>
-                </div>
+                {/* Sprint 3: Multi-Platform Listing Preview Component (Agent 3) */}
+                {selectedProduct && (
+                  <ListingPreview
+                    product={selectedProduct}
+                    selectedPlatform={selectedPlatform}
+                    onSelectPlatform={setSelectedPlatform}
+                    onRunFullPipeline={handleRunFullPipeline}
+                    isRunningPipeline={runningPipelineId === selectedProduct.id}
+                    copied={copied}
+                    setCopied={setCopied}
+                  />
+                )}
               </div>
             </div>
 
@@ -693,6 +856,7 @@ export default function App() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {products.map((p) => {
                     const isSelected = selectedProduct?.id === p.id;
+                    const hasListings = p.listings && p.listings.length > 0;
                     return (
                       <div
                         key={p.id}
@@ -707,12 +871,18 @@ export default function App() {
                           <h4 className="font-bold text-sm text-white line-clamp-1">{p.name}</h4>
                           <span
                             className={`text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
-                              p.status === 'analyzed'
+                              p.status === 'completed' || hasListings
+                                ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30'
+                                : p.status === 'analyzed'
                                 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                                 : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                             }`}
                           >
-                            {p.status}
+                            {p.status === 'completed' || hasListings
+                              ? '⚡ 3 Listings'
+                              : p.status === 'analyzed'
+                              ? 'Analyzed'
+                              : 'Draft'}
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-xs text-slate-400">
@@ -758,53 +928,47 @@ export default function App() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-slate-400">Last checked:</span>
-                  <span className="text-slate-200 font-mono">{lastChecked || 'Never'}</span>
+                  <span className="font-mono text-slate-200">{lastChecked || 'Not checked yet'}</span>
                 </div>
               </div>
             </div>
 
-            {/* Status Highlights */}
+            {/* Status Metrics Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {/* Service Status */}
+              {/* HTTP Status */}
               <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-1">
-                <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
-                  Backend Status
-                </p>
-                <div className="flex items-center gap-2 pt-1">
+                <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block">
+                  API Status
+                </span>
+                <div className="flex items-center gap-2">
                   <span
                     className={`w-3 h-3 rounded-full ${
                       healthLoading
-                        ? 'bg-amber-400 animate-ping'
+                        ? 'bg-amber-400 animate-pulse'
                         : isHealthy
-                        ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]'
-                        : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]'
+                        ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)]'
+                        : 'bg-rose-400 shadow-[0_0_10px_rgba(251,113,133,0.8)]'
                     }`}
                   />
                   <span className="text-base font-semibold text-white">
-                    {healthLoading
-                      ? 'Checking...'
-                      : isHealthy
-                      ? 'Healthy (200 OK)'
-                      : statusCode
-                      ? `Error (${statusCode})`
-                      : 'Offline'}
+                    {healthLoading ? 'Probing...' : isHealthy ? 'Healthy' : 'Degraded'}
                   </span>
                 </div>
               </div>
 
-              {/* Database Status */}
+              {/* Database Connection */}
               <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-1">
-                <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
-                  PostgreSQL (SELECT 1)
-                </p>
-                <div className="flex items-center gap-2 pt-1">
+                <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block">
+                  Neon PostgreSQL
+                </span>
+                <div className="flex items-center gap-2">
                   <span
                     className={`w-3 h-3 rounded-full ${
                       healthLoading
-                        ? 'bg-amber-400'
+                        ? 'bg-amber-400 animate-pulse'
                         : healthData?.database === 'connected'
-                        ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]'
-                        : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]'
+                        ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)]'
+                        : 'bg-rose-400 shadow-[0_0_10px_rgba(251,113,133,0.8)]'
                     }`}
                   />
                   <span className="text-base font-semibold text-white">
@@ -891,7 +1055,7 @@ export default function App() {
       {/* Persistent Global Footer */}
       <footer className="border-t border-slate-800/80 bg-slate-900/50 py-4 px-4 text-center text-xs text-slate-500 space-y-1">
         <p>
-          Online Seller Assistant &bull; AI Engineering &amp; Autonomous Multi-Agent System &bull; Sprint 2
+          Online Seller Assistant &bull; AI Engineering &amp; Autonomous Multi-Agent System &bull; Sprint 3
         </p>
         <p className="text-[11px] text-slate-600 font-mono">
           FastAPI &bull; Neon PostgreSQL &bull; React Vite &bull; Tailwind CSS &bull; Render &bull; Vercel
