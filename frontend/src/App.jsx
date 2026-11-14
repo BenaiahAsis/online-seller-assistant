@@ -47,6 +47,8 @@ export default function App() {
   const [healthLoading, setHealthLoading] = useState(true);
   const [healthError, setHealthError] = useState(null);
   const [lastChecked, setLastChecked] = useState(null);
+  const [isServerWakingUp, setIsServerWakingUp] = useState(false);
+  const [firstRequestDone, setFirstRequestDone] = useState(false);
 
   // Products & Agent State
   const [products, setProducts] = useState([]);
@@ -170,9 +172,35 @@ export default function App() {
   }, [productsEndpoint]);
 
   useEffect(() => {
-    fetchHealth();
-    fetchProducts();
-  }, [fetchHealth, fetchProducts]);
+    let timer = null;
+    let finished = false;
+
+    if (!firstRequestDone) {
+      timer = setTimeout(() => {
+        if (!finished) {
+          setIsServerWakingUp(true);
+        }
+      }, 5000);
+    }
+
+    const init = async () => {
+      try {
+        await Promise.allSettled([fetchHealth(), fetchProducts()]);
+      } finally {
+        finished = true;
+        if (timer) clearTimeout(timer);
+        setIsServerWakingUp(false);
+        setFirstRequestDone(true);
+      }
+    };
+
+    init();
+
+    return () => {
+      finished = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [fetchHealth, fetchProducts, firstRequestDone]);
 
   // Synchronize logs whenever selected product changes
   useEffect(() => {
@@ -693,6 +721,33 @@ export default function App() {
 
       {/* Main Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {/* Render Cold-Start Server Wake-Up Notice */}
+        {isServerWakingUp && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="bg-amber-950/80 border border-amber-500/70 text-amber-200 px-4 py-3.5 rounded-2xl flex items-center justify-between shadow-2xl backdrop-blur-md animate-pulse"
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex h-3.5 w-3.5 relative shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-amber-500"></span>
+              </span>
+              <div>
+                <p className="font-semibold text-sm text-amber-100">
+                  Waking up the server, this can take up to a minute
+                </p>
+                <p className="text-xs text-amber-300/80">
+                  The backend service is warming up from idle state. Please wait a moment...
+                </p>
+              </div>
+            </div>
+            <div className="text-xs px-2.5 py-1 bg-amber-900/60 border border-amber-600/40 rounded-lg text-amber-300 font-mono hidden sm:inline-block">
+              Free Tier Wake-up
+            </div>
+          </div>
+        )}
+
         {/* Global Floating Toast / Notification */}
         {notification && (
           <div
@@ -1494,7 +1549,7 @@ export default function App() {
                     }`}
                   />
                   <span className="text-base font-semibold text-white">
-                    {healthLoading ? 'Probing...' : isHealthy ? 'Healthy' : 'Degraded'}
+                    {healthLoading ? (isServerWakingUp ? 'Waking up server...' : 'Probing...') : isHealthy ? 'Healthy' : 'Degraded'}
                   </span>
                 </div>
               </div>

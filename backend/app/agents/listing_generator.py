@@ -14,9 +14,10 @@ from app.agents.validation import (
     call_agent,
     grounded,
 )
+from app.config import settings
 
 PLATFORMS = ("shopee", "tiktok", "lazada")
-MODEL = "gpt-4o-mini"
+MODEL = settings.openai_model
 CURRENCY = "\u20b1"
 
 FORBIDDEN_TAG_WORDS = {

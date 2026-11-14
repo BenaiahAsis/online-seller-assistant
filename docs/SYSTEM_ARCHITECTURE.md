@@ -86,7 +86,8 @@ flowchart TD
 | **Backend Framework** | FastAPI (Python 3.11+) | Asynchronous high-performance web framework, native Pydantic validation, OpenAPI/Swagger docs auto-generation |
 | **Concurrency / Streaming** | `sse-starlette` / `StreamingResponse` | Native Server-Sent Events (SSE) streaming for live agent telemetry without WebSocket overhead |
 | **ORM & Database** | SQLAlchemy 2.0, Neon PostgreSQL | Serverless cloud PostgreSQL with connection pooling, declarative data models, reliable ACID transactions |
-| **AI / LLM Integration** | OpenAI API (`gpt-4o-mini` / `gpt-3.5-turbo`) | Cost-effective, low latency, structured JSON response mode support, deterministic fallback resilience |
+| **AI / LLM Integration** | OpenAI API (`gpt-4o-mini` centralized via `Settings`) | Configurable via `OPENAI_MODEL` setting, low latency, structured JSON mode, deterministic fallback resilience |
+| **Rate Limiting** | SlowAPI (Limits) | 5 requests/min per IP on listing generation endpoints with HTTP 429 backoff |
 | **Validation & Safety** | Custom Rule Engine + Pydantic v2 | Anti-hallucination validation, unverified claim redaction, regex formatting filters |
 | **Deployment / CI** | GitHub Actions, Vercel, Render | Automated linting, pytest testing, continuous deployment on every git push to `main` |
 
@@ -328,14 +329,15 @@ All endpoints are versioned under `/api/v1`.
 
 | Method | Endpoint | Description | Request Body | Response |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/health` | Service health check | None | `{"status": "ok", "version": "2.0.0"}` |
-| `POST` | `/api/v1/products` | Create new product record | `ProductCreate` JSON | `ProductResponse` (id, name, price, ...) |
-| `GET` | `/api/v1/products` | List all merchant products | None | `List[ProductResponse]` |
-| `GET` | `/api/v1/products/{id}` | Retrieve product by ID | None | `ProductResponse` |
-| `POST` | `/api/v1/products/{id}/generate-listing` | Execute full 3-agent pipeline synchronously | `{"platform": "shopee"}` | `ProductListingResponse` |
-| `GET` | `/api/v1/products/{id}/generate-listing/stream` | Stream 3-agent pipeline execution in real-time | Query param: `?platform=shopee` | `text/event-stream` (SSE Events) |
-| `GET` | `/api/v1/products/{id}/analysis` | Retrieve market & product analysis | None | `ProductAnalysisResponse` |
-| `GET` | `/api/v1/products/{id}/listing` | Retrieve saved platform listing | Query param: `?platform=shopee` | `ProductListingResponse` |
+| `GET` | `/health` | Keep-alive friendly database health check (`SELECT 1`) | None | `{"status": "healthy", "database": "connected"}` |
+| `POST` | `/api/products` | Create new product record | `ProductCreate` JSON | `ProductResponse` (id, name, price, ...) |
+| `GET` | `/api/products` | List all merchant products | None | `ProductListResponse` |
+| `GET` | `/api/products/{id}` | Retrieve product by ID | None | `ProductResponse` |
+| `POST` | `/api/products/{id}/generate-listings` | Execute Agent 3 listing generation **(Rate limited: 5 req/min per IP)** | None | `List[ProductListingResponse]` |
+| `POST` | `/api/products/{id}/full-pipeline` | Execute full 3-agent pipeline synchronously **(Rate limited: 5 req/min per IP)** | None | `FullPipelineResponse` |
+| `GET` | `/api/products/{id}/logs` | Retrieve audit & execution logs for all agents | None | `List[Dict[str, Any]]` |
+| `PATCH` | `/api/listings/{listing_id}` | Customize title, bullets, or description | `ListingUpdate` JSON | `ProductListingResponse` |
+| `GET` | `/api/products/{id}/listings` | Retrieve generated platform listings | None | `List[ProductListingResponse]` |
 
 ---
 

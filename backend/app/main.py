@@ -6,6 +6,8 @@ from typing import Annotated, Any
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -17,7 +19,9 @@ from app.agents import (
     run_market_analyzer_agent,
     run_product_analysis_agent,
 )
+from app.config import settings
 from app.database import check_database_connection, get_db, init_db
+from app.limiter import limiter
 from app.models import Product, ProductAnalysis, ProductListing
 from app.schemas import (
     FullPipelineResponse,
@@ -39,11 +43,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Online Seller Assistant API",
+    title=settings.app_name,
     description="Backend API service for Online Seller Assistant",
-    version="1.0.0",
+    version=settings.app_version,
     lifespan=lifespan,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Parse CORS origins from environment variable (comma-separated), defaulting to http://localhost:5173
 cors_origins_env = os.getenv("CORS_ORIGINS", "http://localhost:5173")
@@ -68,6 +74,8 @@ async def catch_exceptions_middleware(request: Request, call_next):
     """
     try:
         return await call_next(request)
+    except (RateLimitExceeded, HTTPException):
+        raise
     except Exception as exc:
         logger.error(
             f"Unhandled server error on {request.method} {request.url.path}: {exc}",
@@ -98,6 +106,8 @@ app.add_middleware(
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Fallback exception handler for ASGI errors."""
+    if isinstance(exc, (HTTPException, RateLimitExceeded)):
+        raise exc
     logger.error(
         f"Unhandled server error on {request.method} {request.url.path}: {exc}",
         exc_info=True,
@@ -123,12 +133,10 @@ def read_root():
 
 @app.get("/health")
 def health_check():
-    """Health check endpoint running SELECT 1 against PostgreSQL via DATABASE_URL."""
+    """Keep-alive friendly health check endpoint running SELECT 1 against PostgreSQL."""
     db_status = check_database_connection()
 
     if db_status.get("connected"):
-        # Run schema migrations to ensure all tables and columns exist
-        init_db()
         return {
             "status": "healthy",
             "database": "connected",
@@ -341,8 +349,26 @@ def trigger_market_analysis(product_id: int, db: Annotated[Session, Depends(get_
     response_model=list[ProductListingResponse],
     tags=["Agents"],
 )
+@app.post(
+    "/api/products/{product_id}/generate-listing",
+    response_model=list[ProductListingResponse],
+    include_in_schema=False,
+)
+@app.post(
+    "/api/v1/products/{product_id}/generate-listings",
+    response_model=list[ProductListingResponse],
+    include_in_schema=False,
+)
+@app.post(
+    "/api/v1/products/{product_id}/generate-listing",
+    response_model=list[ProductListingResponse],
+    include_in_schema=False,
+)
+@limiter.limit(settings.rate_limit_generate_listing)
 def trigger_listing_generation(
-    product_id: int, db: Annotated[Session, Depends(get_db)]
+    request: Request,
+    product_id: int,
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Run Agent 3 to create Shopee, TikTok, and Lazada listings."""
     product = db.get(Product, product_id)
@@ -418,7 +444,17 @@ def trigger_listing_generation(
     response_model=FullPipelineResponse,
     tags=["Agents"],
 )
-def trigger_full_pipeline(product_id: int, db: Annotated[Session, Depends(get_db)]):
+@app.post(
+    "/api/v1/products/{product_id}/full-pipeline",
+    response_model=FullPipelineResponse,
+    include_in_schema=False,
+)
+@limiter.limit(settings.rate_limit_generate_listing)
+def trigger_full_pipeline(
+    request: Request,
+    product_id: int,
+    db: Annotated[Session, Depends(get_db)],
+):
     """Execute the full sequential 3-agent pipeline in a single automated flow."""
     product = db.get(Product, product_id)
     if not product:
@@ -434,7 +470,7 @@ def trigger_full_pipeline(product_id: int, db: Annotated[Session, Depends(get_db
     trigger_market_analysis(product_id=product_id, db=db)
 
     # Step 3: Agent 3 (Listing Generator)
-    trigger_listing_generation(product_id=product_id, db=db)
+    trigger_listing_generation(request=request, product_id=product_id, db=db)
 
     db.refresh(product)
     pipeline_logs = (product.analysis.execution_logs or []) if product.analysis else []

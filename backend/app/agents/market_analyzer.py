@@ -13,9 +13,10 @@ from app.agents.validation import (
     call_agent,
     grounded,
 )
+from app.config import settings
 
 PLATFORMS = ("shopee", "tiktok", "lazada")
-MODEL = "gpt-4o-mini"
+MODEL = settings.openai_model
 CURRENCY = "\u20b1"
 BUDGET_MAX = 500.0
 MID_MAX = 2500.0

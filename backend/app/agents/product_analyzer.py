@@ -7,6 +7,8 @@ import os
 import re
 from typing import Any
 
+from app.config import settings
+
 MATERIAL_TERMS = {
     "aluminum",
     "zinc",
@@ -462,7 +464,7 @@ def run_product_analysis_agent(product_data: dict[str, Any]) -> dict[str, Any]:
         )
 
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=settings.openai_model,
             messages=[
                 {
                     "role": "system",

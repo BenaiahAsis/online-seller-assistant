@@ -6,6 +6,8 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+from app.config import settings
+
 logger = logging.getLogger("uvicorn.error")
 
 
@@ -80,7 +82,9 @@ def generate_agent_1_logs(
 
     # Step 3: Engine selection
     engine_name = (
-        "OpenAI gpt-4o-mini" if source == "ai" else "Deterministic NLP (Offline Safe)"
+        f"OpenAI {settings.openai_model}"
+        if source == "ai"
+        else "Deterministic NLP (Offline Safe)"
     )
     logs.append(
         make_log(

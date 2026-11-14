@@ -18,6 +18,7 @@ from app.agents.market_analyzer import (
 )
 from app.agents.validation import scan_claims, unsupported_claims
 from app.database import get_db
+from app.limiter import limiter
 from app.main import app
 from app.models import Base
 
@@ -43,7 +44,9 @@ def override_get_db():
 def setup_database():
     Base.metadata.create_all(bind=test_engine)
     app.dependency_overrides[get_db] = override_get_db
+    limiter.reset()
     yield
+    limiter.reset()
     Base.metadata.drop_all(bind=test_engine)
     app.dependency_overrides.clear()
 
