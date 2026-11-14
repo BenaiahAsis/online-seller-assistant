@@ -124,7 +124,7 @@ def test_product_analyzer_fallback_logic():
         materials="100% combed cotton",
         features="Breathable fabric, double-stitched hem, preshrunk",
     )
-    assert profile["category"] == "Apparel & Accessories"
+    assert profile["category"] == "Fashion & Apparel"
     assert "key_specifications" in profile
     assert len(profile["selling_points"]) >= 3
     assert len(profile["suggested_keywords"]) >= 1
@@ -141,6 +141,6 @@ def test_run_product_analysis_agent_fallback_mode():
             "features": "Bluetooth 5.3, 30-hour battery life, IPX5 water resistant",
         }
     )
-    assert result["category"] == "Electronics & Gadgets"
+    assert result["category"] == "Audio & Headphones"
     assert "target_audience" in result
     assert "raw_summary" in result

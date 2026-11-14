@@ -80,6 +80,19 @@ SYSTEM = (
 # ===========================================================================
 
 
+BANNED_KEYWORD_TERMS = {
+    "aluminum",
+    "zinc",
+    "iron",
+    "steel",
+    "glass",
+    "plastic",
+    "free",
+    "bought",
+    "item",
+}
+
+
 def _derive_fallback_market_insights(
     name: str,
     price: float,
@@ -89,9 +102,17 @@ def _derive_fallback_market_insights(
     keywords: list[str] | None,
 ) -> dict[str, Any]:
     points = [str(p) for p in (selling_points or []) if str(p).strip()][:5]
-    terms = [str(k) for k in (keywords or []) if str(k).strip()]
+    terms = [
+        str(k)
+        for k in (keywords or [])
+        if str(k).strip() and str(k).lower().strip() not in BANNED_KEYWORD_TERMS
+    ]
     if not terms:
-        terms = [w for w in name.lower().split() if len(w) > 3][:3] or ["online"]
+        terms = [
+            w
+            for w in name.lower().split()
+            if len(w) > 3 and w not in BANNED_KEYWORD_TERMS
+        ][:3] or ["lifestyle online"]
 
     ranked = [
         {

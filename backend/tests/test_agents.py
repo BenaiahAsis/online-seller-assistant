@@ -454,3 +454,190 @@ def test_full_pipeline_endpoint():
     list_res = client.get(f"/api/products/{product_id}/listings")
     assert list_res.status_code == 200
     assert len(list_res.json()) == 3
+
+
+def test_agent_execution_logs_and_endpoint():
+    product_id = _create_product(name="Smart Watch Band", price=350.0)
+
+    # 1. Test Agent 1 logs
+    a1_res = client.post(f"/api/products/{product_id}/analyze")
+    assert a1_res.status_code == 200
+    analysis = a1_res.json()["analysis"]
+    assert "execution_logs" in analysis
+    a1_logs = analysis["execution_logs"]
+    assert len(a1_logs) >= 5
+    assert any(log["stage"] == "INGEST" for log in a1_logs)
+    assert any("Agent 1" in log["agent"] for log in a1_logs)
+
+    # 2. Test Agent 2 logs added
+    a2_res = client.post(f"/api/products/{product_id}/market-analysis")
+    assert a2_res.status_code == 200
+    a2_logs = a2_res.json()["analysis"]["execution_logs"]
+    assert any("Agent 2" in log["agent"] for log in a2_logs)
+
+    # 3. Test Agent 3 logs added
+    a3_res = client.post(f"/api/products/{product_id}/generate-listings")
+    assert a3_res.status_code == 200
+
+    # 4. Test GET /api/products/{id}/logs endpoint
+    logs_res = client.get(f"/api/products/{product_id}/logs")
+    assert logs_res.status_code == 200
+    all_logs = logs_res.json()
+    assert len(all_logs) >= 10
+    agent_names = {log["agent"] for log in all_logs}
+    assert any("Agent 1" in a for a in agent_names)
+    assert any("Agent 2" in a for a in agent_names)
+    assert any("Agent 3" in a for a in agent_names)
+
+
+def test_update_product_listing_endpoint():
+    product_id = _create_product(name="Leather Cardholder", price=450.0)
+    gen_res = client.post(f"/api/products/{product_id}/generate-listings")
+    assert gen_res.status_code == 200
+    listing = gen_res.json()[0]
+    listing_id = listing["id"]
+
+    patch_res = client.patch(
+        f"/api/listings/{listing_id}",
+        json={"title": "Customized Handcrafted Cardholder"},
+    )
+    assert patch_res.status_code == 200
+    updated = patch_res.json()
+    assert updated["title"] == "Customized Handcrafted Cardholder"
+
+
+# --------------------------------------------------------------------------
+# Sprint 4 Pipeline Quality Tests (Requirements a-e)
+# --------------------------------------------------------------------------
+
+
+def test_smartwatch_category_inference():
+    """Requirement (a): Category inference for smartwatch.
+
+    Must infer Wearables & Smartwatches.
+    """
+    from app.agents.product_analyzer import (
+        _derive_fallback_profile,
+        infer_category_and_audience,
+    )
+
+    category, audience = infer_category_and_audience(
+        "Smartwatch", "aluminum, zinc iron, glass Free strap, Most bought item"
+    )
+    assert category == "Wearables & Smartwatches"
+    assert "smartwatch" in audience.lower() or "budget" in audience.lower()
+
+    profile = _derive_fallback_profile(
+        name="Smartwatch",
+        price=20.0,
+        quantity=10,
+        materials="aluminum, zinc iron, glass",
+        features="Free strap, Most bought item",
+    )
+    assert profile["category"] == "Wearables & Smartwatches"
+    assert profile["category"] != "General Merchandise"
+
+
+def test_zinc_iron_materials_not_in_hashtags():
+    """Requirement (b): 'zinc' and 'iron' must never appear as hashtags in listings."""
+    from app.agents.listing_generator import _derive_fallback_listings
+    from app.agents.product_analyzer import _derive_fallback_profile
+
+    profile = _derive_fallback_profile(
+        name="Smartwatch",
+        price=20.0,
+        quantity=10,
+        materials="aluminum, zinc iron, glass",
+        features="Free strap, Most bought item",
+    )
+    listings = _derive_fallback_listings(
+        name="Smartwatch",
+        price=20.0,
+        materials="aluminum, zinc iron, glass",
+        features="Free strap, Most bought item",
+        category=profile["category"],
+        selling_points=profile["selling_points"],
+        keywords=profile["suggested_keywords"],
+    )
+
+    for listing in listings:
+        hashtags_lower = [h.lower() for h in listing["hashtags"]]
+        assert "#zinc" not in hashtags_lower
+        assert "#iron" not in hashtags_lower
+        assert "#aluminum" not in hashtags_lower
+        assert "#glass" not in hashtags_lower
+        assert "#free" not in hashtags_lower
+
+
+def test_meta_text_never_appears_in_output():
+    """Requirement (c): Meta-text line must never appear in output descriptions."""
+    from app.agents.listing_generator import _derive_fallback_listings
+    from app.agents.product_analyzer import _derive_fallback_profile
+
+    profile = _derive_fallback_profile(
+        name="Smartwatch",
+        price=20.0,
+        quantity=10,
+        materials="aluminum, zinc iron, glass",
+        features="Free strap, Most bought item",
+    )
+    listings = _derive_fallback_listings(
+        name="Smartwatch",
+        price=20.0,
+        materials="aluminum, zinc iron, glass",
+        features="Free strap, Most bought item",
+        category=profile["category"],
+        selling_points=profile["selling_points"],
+        keywords=profile["suggested_keywords"],
+    )
+
+    banned_meta_phrases = [
+        "all details above come from",
+        "seller's product information",
+        "what the seller lists",
+    ]
+
+    for listing in listings:
+        desc_lower = listing["description"].lower()
+        title_lower = listing["title"].lower()
+        for phrase in banned_meta_phrases:
+            assert phrase not in desc_lower
+            assert phrase not in title_lower
+
+
+def test_most_bought_item_flagged():
+    """Requirement (d): 'Most bought item' must be flagged as unverified claim."""
+    from app.agents.product_analyzer import (
+        _derive_fallback_profile,
+        detect_unverified_claims,
+    )
+
+    flags = detect_unverified_claims("Free strap, Most bought item")
+    assert len(flags) >= 1
+    assert any("most bought" in f["claim"].lower() for f in flags)
+    assert any("popular choice" in f["softened"].lower() for f in flags)
+
+    profile = _derive_fallback_profile(
+        name="Smartwatch",
+        price=20.0,
+        quantity=10,
+        materials="aluminum, zinc iron, glass",
+        features="Free strap, Most bought item",
+    )
+    unverified = profile["market_insights"]["unverified_claims"]
+    assert any("most bought" in f["claim"].lower() for f in unverified)
+
+
+def test_fake_claim_fda_approved_blocked():
+    """Requirement (e): Fake claims like 'FDA approved' must be blocked."""
+    from app.agents.product_analyzer import detect_unverified_claims
+    from app.agents.validation import scan_claims
+
+    # In Agent 1 detector
+    flags = detect_unverified_claims("FDA approved, 100% waterproof")
+    assert any("fda" in f["claim"].lower() for f in flags)
+
+    # In Agent 2/3 validator scanner
+    corpus = "smartwatch aluminum glass free strap"
+    violations = scan_claims({"bullet": "FDA approved medical device"}, corpus)
+    assert any("certification claim" in v for v in violations)

@@ -81,6 +81,12 @@ def init_db() -> bool:
                         "ADD COLUMN IF NOT EXISTS market_insights JSON;"
                     )
                 )
+                conn.execute(
+                    text(
+                        "ALTER TABLE product_analyses "
+                        "ADD COLUMN IF NOT EXISTS execution_logs JSON;"
+                    )
+                )
                 conn.commit()
             elif engine.dialect.name == "sqlite":
                 from sqlalchemy import inspect
@@ -88,8 +94,7 @@ def init_db() -> bool:
                 inspector = inspect(engine)
                 if "product_analyses" in inspector.get_table_names():
                     cols = [
-                        col["name"]
-                        for col in inspector.get_columns("product_analyses")
+                        col["name"] for col in inspector.get_columns("product_analyses")
                     ]
                     if "market_insights" not in cols:
                         conn.execute(
@@ -98,7 +103,14 @@ def init_db() -> bool:
                                 "ADD COLUMN market_insights JSON;"
                             )
                         )
-                        conn.commit()
+                    if "execution_logs" not in cols:
+                        conn.execute(
+                            text(
+                                "ALTER TABLE product_analyses "
+                                "ADD COLUMN execution_logs JSON;"
+                            )
+                        )
+                    conn.commit()
         return True
     except Exception as exc:
         import logging

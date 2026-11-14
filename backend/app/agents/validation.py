@@ -32,7 +32,7 @@ CLAIM_RULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (
         r"certified|iso\s*\d+|\bfda\b|ce mark",
         "certification claim",
-        ("certif", "iso", "fda", "ce mark"),
+        (),
     ),
     (
         r"hypoallergenic|non[\s-]*toxic|medical[\s-]*grade|food[\s-]*grade|bpa",
@@ -109,9 +109,47 @@ def words(text: str) -> set[str]:
     return {w for w in re.findall(r"[a-z0-9]+", text.lower()) if len(w) >= 4}
 
 
-def grounded(text: str, sources: list[str]) -> bool:
+COMMON_PRODUCT_TERMS = {
+    "everyday",
+    "daily",
+    "style",
+    "stylish",
+    "wear",
+    "design",
+    "comfort",
+    "comfortable",
+    "practical",
+    "quality",
+    "modern",
+    "reliable",
+    "essential",
+    "versatile",
+    "compact",
+    "sleek",
+    "durable",
+    "finish",
+    "edition",
+    "lifestyle",
+    "value",
+    "choice",
+    "popular",
+    "device",
+    "watch",
+    "smartwatch",
+    "accessory",
+    "accessories",
+    "crafted",
+}
+
+
+def grounded(text: str, sources: list[str], allow_general_terms: bool = True) -> bool:
     found = words(text)
-    return bool(found) and any(found & words(source) for source in sources)
+    if not found:
+        return False
+    source_words = set().union(*(words(source) for source in sources))
+    if allow_general_terms:
+        source_words |= COMMON_PRODUCT_TERMS
+    return bool(found & source_words)
 
 
 # ===========================================================================

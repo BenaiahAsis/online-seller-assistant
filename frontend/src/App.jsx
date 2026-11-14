@@ -1,27 +1,40 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import ListingPreview from './components/ListingPreview';
+import MarketStrategyCard from './components/MarketStrategyCard';
+import AgentLogsConsole from './components/AgentLogsConsole';
 
 const SAMPLE_PRODUCTS = [
   {
+    icon: '⌨️',
+    label: 'Bamboo Keyboard',
     name: 'Eco-Friendly Bamboo Wireless Keyboard',
     price: '49.99',
     quantity: '120',
     materials: 'Natural bamboo wood casing, recycled ABS keycaps, aluminum frame',
-    features: 'Dual-mode Bluetooth 5.0 and 2.4GHz wireless connection, 60-hour rechargeable USB-C battery, silent scissor-switch keys, ergonomic 6-degree wrist tilt, multi-device fast switching',
+    features:
+      'Dual-mode Bluetooth 5.0 and 2.4GHz wireless connection, 60-hour rechargeable USB-C battery, silent scissor-switch keys, ergonomic 6-degree wrist tilt, multi-device fast switching',
   },
   {
+    icon: '🥤',
+    label: 'Smart Tumbler',
     name: 'Insulated Stainless Steel Smart Thermal Tumbler',
     price: '29.50',
     quantity: '250',
-    materials: 'Double-wall 18/8 food-grade stainless steel, BPA-free silicone seal lid',
-    features: 'LCD temperature display on touch lid, keeps beverages hot for 12h and iced for 24h, leak-proof design, fits standard car cup holders, 500ml capacity',
+    materials:
+      'Double-wall 18/8 food-grade stainless steel, BPA-free silicone seal lid',
+    features:
+      'LCD temperature display on touch lid, keeps beverages hot for 12h and iced for 24h, leak-proof design, fits standard car cup holders, 500ml capacity',
   },
   {
+    icon: '🪑',
+    label: 'Lumbar Cushion',
     name: 'Ergonomic Memory Foam Lumbar Support Cushion',
     price: '34.99',
     quantity: '85',
-    materials: 'High-density memory foam, breathable 3D mesh fabric cover, adjustable elastic strap',
-    features: 'Orthopedic posture correction, dual adjustable straps for office chairs and cars, removable machine-washable cover, relieves lower back strain during long work sessions',
+    materials:
+      'High-density memory foam, breathable 3D mesh fabric cover, adjustable elastic strap',
+    features:
+      'Orthopedic posture correction, dual adjustable straps for office chairs and cars, removable machine-washable cover, relieves lower back strain during long work sessions',
   },
 ];
 
@@ -41,13 +54,20 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [analyzingId, setAnalyzingId] = useState(null);
+  const [runningMarketId, setRunningMarketId] = useState(null);
   const [runningPipelineId, setRunningPipelineId] = useState(null);
   const [notification, setNotification] = useState(null);
   const [copiedKeyword, setCopiedKeyword] = useState(null);
 
-  // Sprint 3 State: Platform Selector & Clipboard Copy State
+  // Agent Execution Logs State
+  const [agentLogs, setAgentLogs] = useState([]);
+  const [isExecutingLogs, setIsExecutingLogs] = useState(false);
+  const [executingAgentName, setExecutingAgentName] = useState(null);
+
+  // Multi-Platform Listing Preview State
   const [selectedPlatform, setSelectedPlatform] = useState('shopee'); // 'shopee' | 'tiktok' | 'lazada'
   const [copied, setCopied] = useState(false);
+  const [catalogSearch, setCatalogSearch] = useState('');
 
   // Form State
   const [formData, setFormData] = useState({
@@ -57,6 +77,23 @@ export default function App() {
     materials: '',
     features: '',
   });
+
+  const priceSanityWarning = useMemo(() => {
+    const name = (formData.name || '').toLowerCase();
+    const priceNum = parseFloat(formData.price);
+    if (!isNaN(priceNum)) {
+      if ((name.includes('smartwatch') || name.includes('watch')) && priceNum < 100) {
+        return `Price notice: ₱${priceNum.toFixed(2)} is unusually low for a smartwatch (typical Philippine baseline is ₱350 - ₱3,500). Please verify your price.`;
+      }
+      if (name.includes('laptop') && priceNum < 1500) {
+        return `Price notice: ₱${priceNum.toFixed(2)} is unusually low for a laptop. Please verify your price.`;
+      }
+      if (name.includes('phone') && priceNum < 800) {
+        return `Price notice: ₱${priceNum.toFixed(2)} is unusually low for a smartphone. Please verify your price.`;
+      }
+    }
+    return null;
+  }, [formData.name, formData.price]);
 
   const rawApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
   const apiUrl = rawApiUrl.replace(/\/+$/, '');
@@ -76,7 +113,9 @@ export default function App() {
 
       if (!response.ok) {
         setHealthData(data);
-        setHealthError(data?.error || `Backend responded with HTTP status ${response.status}`);
+        setHealthError(
+          data?.error || `Backend responded with HTTP status ${response.status}`
+        );
       } else {
         setHealthData(data);
         setHealthError(null);
@@ -107,7 +146,7 @@ export default function App() {
         const incomingProducts = data.products || [];
         setProducts(incomingProducts);
 
-        // Keep selectedProduct synchronized or select the best initial product
+        // Keep selectedProduct synchronized
         setSelectedProduct((current) => {
           if (!current && incomingProducts.length > 0) {
             return (
@@ -135,29 +174,65 @@ export default function App() {
     fetchProducts();
   }, [fetchHealth, fetchProducts]);
 
+  // Synchronize logs whenever selected product changes
+  useEffect(() => {
+    if (selectedProduct?.analysis?.execution_logs) {
+      setAgentLogs(selectedProduct.analysis.execution_logs);
+    } else if (!isExecutingLogs) {
+      setAgentLogs([]);
+    }
+  }, [selectedProduct, isExecutingLogs]);
+
+  // Helper to append simulated progress log during UI automation
+  const addProgressLog = (agent, stage, message, level = 'INFO') => {
+    const entry = {
+      timestamp: new Date().toISOString(),
+      agent,
+      stage,
+      level,
+      message,
+    };
+    setAgentLogs((prev) => [...prev, entry]);
+  };
+
   // Load a demo sample into the input form
   const handleLoadSample = (sampleIndex = 0) => {
     const sample = SAMPLE_PRODUCTS[sampleIndex % SAMPLE_PRODUCTS.length];
-    setFormData({ ...sample });
+    setFormData({
+      name: sample.name,
+      price: sample.price,
+      quantity: sample.quantity,
+      materials: sample.materials,
+      features: sample.features,
+    });
     setNotification({
       type: 'info',
       message: `Loaded sample: "${sample.name}"`,
     });
   };
 
-  // Submit new product and immediately analyze with Agent 1
+  // Submit new product and run Agent 1
   const handleCreateAndAnalyze = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!formData.name.trim() || !formData.price) {
       setNotification({
         type: 'error',
-        message: 'Product name and price are required.',
+        message: 'Product title and price are required.',
       });
       return;
     }
 
     setSubmitting(true);
+    setIsExecutingLogs(true);
+    setExecutingAgentName('Agent 1 (Product Analyzer)');
     setNotification(null);
+    setAgentLogs([]);
+
+    addProgressLog(
+      'Agent 1: Product Analyzer',
+      'INGEST',
+      `Ingesting raw seller parameters for "${formData.name.trim()}"...`
+    );
 
     try {
       // Step 1: Create Product
@@ -175,32 +250,59 @@ export default function App() {
 
       if (!createRes.ok) {
         const errData = await createRes.json().catch(() => null);
-        throw new Error(errData?.detail || `Failed to create product (${createRes.status})`);
+        throw new Error(
+          errData?.detail || `Failed to create product (${createRes.status})`
+        );
       }
 
       const createdProduct = await createRes.json();
       setSelectedProduct(createdProduct);
+      setAnalyzingId(createdProduct.id);
+
+      addProgressLog(
+        'Agent 1: Product Analyzer',
+        'CLASSIFY',
+        'Analyzing product attributes and identifying target consumer demographic...'
+      );
 
       // Step 2: Trigger Agent 1 Analysis
-      setAnalyzingId(createdProduct.id);
-      const analyzeRes = await fetch(`${productsEndpoint}/${createdProduct.id}/analyze`, {
-        method: 'POST',
-        headers: { Accept: 'application/json' },
-      });
+      const analyzeRes = await fetch(
+        `${productsEndpoint}/${createdProduct.id}/analyze`,
+        {
+          method: 'POST',
+          headers: { Accept: 'application/json' },
+        }
+      );
 
       if (!analyzeRes.ok) {
         const errData = await analyzeRes.json().catch(() => null);
-        throw new Error(errData?.detail || `Failed running Agent 1 (${analyzeRes.status})`);
+        throw new Error(
+          errData?.detail || `Failed running Agent 1 (${analyzeRes.status})`
+        );
       }
 
       const analyzedProduct = await analyzeRes.json();
       setSelectedProduct(analyzedProduct);
+
+      if (analyzedProduct.analysis?.execution_logs) {
+        setAgentLogs(analyzedProduct.analysis.execution_logs);
+      } else {
+        addProgressLog(
+          'Agent 1: Product Analyzer',
+          'COMPLETE',
+          'Product profiling completed successfully.',
+          'SUCCESS'
+        );
+      }
+
       setNotification({
         type: 'success',
-        message: `Product created & analyzed by Agent 1! (${analyzedProduct.analysis?.category || 'Ready'})`,
+        message: `Agent 1 completed product analysis! Inferred category: "${
+          analyzedProduct.analysis?.category || 'Ready'
+        }"`,
       });
 
-      // Reset form
+      // Clear form
       setFormData({
         name: '',
         price: '',
@@ -211,20 +313,38 @@ export default function App() {
 
       await fetchProducts();
     } catch (err) {
+      addProgressLog(
+        'Agent 1: Product Analyzer',
+        'ERROR',
+        err instanceof Error ? err.message : 'Analysis failed',
+        'ERROR'
+      );
       setNotification({
         type: 'error',
-        message: err instanceof Error ? err.message : 'Failed to submit and analyze product',
+        message:
+          err instanceof Error ? err.message : 'Failed to submit and analyze product',
       });
     } finally {
       setSubmitting(false);
       setAnalyzingId(null);
+      setIsExecutingLogs(false);
+      setExecutingAgentName(null);
     }
   };
 
-  // Trigger analysis for an existing product in the catalog (Agent 1)
+  // Run Agent 1 individually for an existing product
   const handleRunAnalysis = async (productId) => {
     setAnalyzingId(productId);
+    setIsExecutingLogs(true);
+    setExecutingAgentName('Agent 1 (Product Analyzer)');
     setNotification(null);
+
+    addProgressLog(
+      'Agent 1: Product Analyzer',
+      'INGEST',
+      'Re-analyzing product specifications and extracting value propositions...'
+    );
+
     try {
       const res = await fetch(`${productsEndpoint}/${productId}/analyze`, {
         method: 'POST',
@@ -236,25 +356,103 @@ export default function App() {
       }
       const updated = await res.json();
       setSelectedProduct(updated);
+      if (updated.analysis?.execution_logs) {
+        setAgentLogs(updated.analysis.execution_logs);
+      }
       setNotification({
         type: 'success',
-        message: `Agent 1 completed analysis for "${updated.name}"!`,
+        message: `Agent 1 completed profile analysis for "${updated.name}"!`,
       });
       await fetchProducts();
     } catch (err) {
+      addProgressLog(
+        'Agent 1: Product Analyzer',
+        'ERROR',
+        err instanceof Error ? err.message : 'Analysis failed',
+        'ERROR'
+      );
       setNotification({
         type: 'error',
         message: err instanceof Error ? err.message : 'Analysis failed',
       });
     } finally {
       setAnalyzingId(null);
+      setIsExecutingLogs(false);
+      setExecutingAgentName(null);
     }
   };
 
-  // Sprint 3: Trigger full 3-agent autonomous pipeline (Agent 1 -> Agent 2 -> Agent 3)
+  // Run Agent 2 (Market Analysis)
+  const handleRunMarketAnalysis = async (productId) => {
+    setRunningMarketId(productId);
+    setIsExecutingLogs(true);
+    setExecutingAgentName('Agent 2 (Market Strategist)');
+    setNotification(null);
+
+    addProgressLog(
+      'Agent 2: Market Analyzer',
+      'PRICE_TIER',
+      'Evaluating price tier positioning and buyer psychology...'
+    );
+
+    try {
+      const res = await fetch(
+        `${productsEndpoint}/${productId}/market-analysis`,
+        {
+          method: 'POST',
+          headers: { Accept: 'application/json' },
+        }
+      );
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.detail || 'Market analysis request failed');
+      }
+      const updated = await res.json();
+      setSelectedProduct(updated);
+      if (updated.analysis?.execution_logs) {
+        setAgentLogs(updated.analysis.execution_logs);
+      }
+      setNotification({
+        type: 'success',
+        message: `Agent 2 completed market positioning for "${updated.name}"!`,
+      });
+      await fetchProducts();
+    } catch (err) {
+      addProgressLog(
+        'Agent 2: Market Analyzer',
+        'ERROR',
+        err instanceof Error ? err.message : 'Market analysis failed',
+        'ERROR'
+      );
+      setNotification({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Market analysis failed',
+      });
+    } finally {
+      setRunningMarketId(null);
+      setIsExecutingLogs(false);
+      setExecutingAgentName(null);
+    }
+  };
+
+  // Trigger full 3-agent autonomous pipeline (Agent 1 -> Agent 2 -> Agent 3)
   const handleRunFullPipeline = async (productId) => {
     setRunningPipelineId(productId);
+    setIsExecutingLogs(true);
+    setExecutingAgentName('3-Agent Pipeline');
     setNotification(null);
+
+    addProgressLog(
+      'Pipeline Orchestrator',
+      'INIT',
+      'Initializing sequential 3-agent autonomous workflow...'
+    );
+    addProgressLog(
+      'Agent 1: Product Analyzer',
+      'INGEST',
+      'Agent 1 reading product features, materials, and price...'
+    );
+
     try {
       const res = await fetch(`${productsEndpoint}/${productId}/full-pipeline`, {
         method: 'POST',
@@ -262,22 +460,48 @@ export default function App() {
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => null);
-        throw new Error(errData?.detail || `Failed to run full pipeline (${res.status})`);
+        throw new Error(
+          errData?.detail || `Failed to run full pipeline (${res.status})`
+        );
       }
       const data = await res.json();
       setSelectedProduct(data.product);
+
+      if (data.logs && data.logs.length > 0) {
+        setAgentLogs(data.logs);
+      } else if (data.product?.analysis?.execution_logs) {
+        setAgentLogs(data.product.analysis.execution_logs);
+      } else {
+        addProgressLog(
+          'Pipeline Orchestrator',
+          'COMPLETE',
+          'Full 3-agent pipeline successfully executed. Listings ready for Shopee, TikTok, and Lazada.',
+          'SUCCESS'
+        );
+      }
+
       setNotification({
         type: 'success',
-        message: 'Full 3-agent pipeline completed successfully! Shopee, TikTok Shop, and Lazada listings ready.',
+        message:
+          'Full 3-agent pipeline completed successfully! Shopee, TikTok Shop, and Lazada listings ready.',
       });
       await fetchProducts();
     } catch (err) {
+      addProgressLog(
+        'Pipeline Orchestrator',
+        'ERROR',
+        err instanceof Error ? err.message : 'Pipeline execution failed',
+        'ERROR'
+      );
       setNotification({
         type: 'error',
-        message: err instanceof Error ? err.message : 'Failed to run full pipeline',
+        message:
+          err instanceof Error ? err.message : 'Failed to run full pipeline',
       });
     } finally {
       setRunningPipelineId(null);
+      setIsExecutingLogs(false);
+      setExecutingAgentName(null);
     }
   };
 
@@ -287,13 +511,22 @@ export default function App() {
     if (!formData.name.trim() || !formData.price) {
       setNotification({
         type: 'error',
-        message: 'Product name and price are required.',
+        message: 'Product title and price are required.',
       });
       return;
     }
 
     setSubmitting(true);
+    setIsExecutingLogs(true);
+    setExecutingAgentName('Full 3-Agent Pipeline');
     setNotification(null);
+    setAgentLogs([]);
+
+    addProgressLog(
+      'Pipeline Orchestrator',
+      'INGEST',
+      `Creating product "${formData.name.trim()}" in PostgreSQL...`
+    );
 
     try {
       // Step 1: Create Product
@@ -311,13 +544,15 @@ export default function App() {
 
       if (!createRes.ok) {
         const errData = await createRes.json().catch(() => null);
-        throw new Error(errData?.detail || `Failed to create product (${createRes.status})`);
+        throw new Error(
+          errData?.detail || `Failed to create product (${createRes.status})`
+        );
       }
 
       const createdProduct = await createRes.json();
       setSelectedProduct(createdProduct);
 
-      // Reset form
+      // Clear form
       setFormData({
         name: '',
         price: '',
@@ -329,12 +564,21 @@ export default function App() {
       // Step 2: Trigger Full Pipeline
       await handleRunFullPipeline(createdProduct.id);
     } catch (err) {
+      addProgressLog(
+        'Pipeline Orchestrator',
+        'ERROR',
+        err instanceof Error ? err.message : 'Pipeline execution failed',
+        'ERROR'
+      );
       setNotification({
         type: 'error',
-        message: err instanceof Error ? err.message : 'Pipeline execution failed',
+        message:
+          err instanceof Error ? err.message : 'Pipeline execution failed',
       });
     } finally {
       setSubmitting(false);
+      setIsExecutingLogs(false);
+      setExecutingAgentName(null);
     }
   };
 
@@ -346,45 +590,90 @@ export default function App() {
 
   const isHealthy = statusCode === 200 && healthData?.status === 'healthy';
 
+  const filteredCatalog = useMemo(() => {
+    if (!catalogSearch.trim()) return products;
+    const q = catalogSearch.toLowerCase();
+    return products.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        (p.analysis?.category || '').toLowerCase().includes(q)
+    );
+  }, [products, catalogSearch]);
+
+  // Stepper state calculation
+  const getStepStatus = (stepIndex) => {
+    if (!selectedProduct) {
+      return stepIndex === 1 ? 'current' : 'pending';
+    }
+    const hasAnalysis = Boolean(selectedProduct.analysis?.category);
+    const hasMarket = Boolean(selectedProduct.analysis?.market_insights);
+    const hasListings = Boolean(
+      selectedProduct.listings && selectedProduct.listings.length > 0
+    );
+
+    if (stepIndex === 1) return 'completed';
+    if (stepIndex === 2) {
+      if (analyzingId === selectedProduct.id) return 'active';
+      return hasAnalysis ? 'completed' : 'pending';
+    }
+    if (stepIndex === 3) {
+      if (runningMarketId === selectedProduct.id) return 'active';
+      return hasMarket ? 'completed' : hasAnalysis ? 'ready' : 'pending';
+    }
+    if (stepIndex === 4) {
+      if (runningPipelineId === selectedProduct.id) return 'active';
+      return hasListings ? 'completed' : hasMarket ? 'ready' : 'pending';
+    }
+    return 'pending';
+  };
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-      {/* Top Navbar */}
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-20">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-500/30">
+      {/* Top Glassmorphic Navbar */}
+      <header className="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md sticky top-0 z-30 shadow-lg shadow-black/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-500 flex items-center justify-center font-black text-white shadow-lg shadow-indigo-500/30">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-amber-500 flex items-center justify-center font-black text-white shadow-lg shadow-indigo-600/30">
               ⚡
             </div>
             <div>
-              <span className="font-extrabold text-base sm:text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent block leading-tight">
-                Online Seller Assistant
-              </span>
-              <span className="text-[11px] text-slate-400 font-mono">
-                Sprint 3 &bull; Multi-Agent Listing Studio
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-base sm:text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-indigo-300 bg-clip-text text-transparent leading-tight">
+                  Online Seller Assistant
+                </span>
+                <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                  v3.0
+                </span>
+              </div>
+              <span className="text-[11px] text-slate-400 font-mono flex items-center gap-1.5">
+                <span>Autonomous 3-Agent AI Pipeline</span>
+                <span>&bull;</span>
+                <span className="text-emerald-400">PostgreSQL (Neon)</span>
               </span>
             </div>
           </div>
 
-          {/* Navigation Tabs */}
+          {/* Navigation Controls */}
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setActiveTab('assistant')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                 activeTab === 'assistant'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-md shadow-indigo-600/30'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent hover:border-slate-800'
               }`}
             >
-              🤖 AI Studio
+              <span>🤖</span>
+              <span>AI Listing Studio</span>
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('devops')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                 activeTab === 'devops'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-md shadow-indigo-600/30'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent hover:border-slate-800'
               }`}
             >
               <span
@@ -407,17 +696,21 @@ export default function App() {
         {/* Global Floating Toast / Notification */}
         {notification && (
           <div
-            className={`p-3.5 rounded-xl border flex items-center justify-between text-xs sm:text-sm font-medium transition-all shadow-lg ${
+            className={`p-3.5 rounded-xl border flex items-center justify-between text-xs sm:text-sm font-medium transition-all shadow-xl backdrop-blur-sm ${
               notification.type === 'success'
-                ? 'bg-emerald-950/60 border-emerald-700/60 text-emerald-200'
+                ? 'bg-emerald-950/70 border-emerald-600/60 text-emerald-200'
                 : notification.type === 'info'
-                ? 'bg-indigo-950/60 border-indigo-700/60 text-indigo-200'
-                : 'bg-rose-950/60 border-rose-700/60 text-rose-200'
+                ? 'bg-indigo-950/70 border-indigo-600/60 text-indigo-200'
+                : 'bg-rose-950/70 border-rose-600/60 text-rose-200'
             }`}
           >
             <div className="flex items-center gap-2">
               <span className="text-base">
-                {notification.type === 'success' ? '✓' : notification.type === 'info' ? 'ℹ' : '⚠'}
+                {notification.type === 'success'
+                  ? '✓'
+                  : notification.type === 'info'
+                  ? 'ℹ'
+                  : '⚠'}
               </span>
               <span>{notification.message}</span>
             </div>
@@ -432,71 +725,155 @@ export default function App() {
         )}
 
         {activeTab === 'assistant' ? (
-          /* ========================================================================= */
-          /* SPRINT 3: MULTI-AGENT E-COMMERCE LISTING STUDIO                            */
-          /* ========================================================================= */
           <div className="space-y-6">
-            {/* Top Overview Banner */}
-            <div className="bg-gradient-to-r from-slate-900 via-indigo-950/30 to-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl">
+            {/* Top Overview Banner with Stepper */}
+            <div className="bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-slate-800/80 rounded-3xl p-5 sm:p-6 shadow-2xl relative overflow-hidden">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
-                  <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-indigo-400">
+                  <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-400">
                     <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
-                    Autonomous Multi-Agent Pipeline &bull; Sprint 3
+                    Sequential Multi-Agent Architecture
                   </div>
                   <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                    Multi-Agent E-Commerce Listing Studio
+                    Autonomous E-Commerce Listing Studio
                   </h1>
-                  <p className="text-sm text-slate-300 max-w-2xl">
-                    Input raw product details to trigger our sequential 3-agent pipeline: Product Analysis (Agent 1), Market Positioning (Agent 2), and Tailored Listings for Shopee, TikTok Shop, and Lazada (Agent 3).
+                  <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
+                    Transform raw product specs into high-converting, platform-tailored listings with full audit logging and anti-hallucination guardrails.
                   </p>
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs text-slate-400 font-medium">Quick Test:</span>
-                  <button
-                    type="button"
-                    onClick={() => handleLoadSample(0)}
-                    className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition-colors"
+
+                {/* Sample Presets */}
+                <div className="space-y-1.5 flex-shrink-0">
+                  <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
+                    1-Click Demo Presets:
+                  </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {SAMPLE_PRODUCTS.map((s, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleLoadSample(idx)}
+                        className="inline-flex items-center gap-1.5 text-xs bg-slate-800/90 hover:bg-slate-700/90 text-slate-200 px-3 py-1.5 rounded-xl border border-slate-700 transition-all active:scale-95 shadow-sm"
+                      >
+                        <span>{s.icon}</span>
+                        <span>{s.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Interactive 4-Step Pipeline Stepper */}
+              <div className="mt-6 pt-5 border-t border-slate-800/80">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {/* Step 1 */}
+                  <div
+                    className={`p-3 rounded-xl border transition-all ${
+                      getStepStatus(1) === 'completed'
+                        ? 'bg-indigo-950/40 border-indigo-500/50 text-indigo-200'
+                        : 'bg-slate-950/60 border-slate-800 text-slate-400'
+                    }`}
                   >
-                    Keyboard
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleLoadSample(1)}
-                    className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition-colors"
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-bold flex items-center justify-center">
+                        1
+                      </span>
+                      <span className="text-xs font-bold text-white">Input Details</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Raw product parameters
+                    </p>
+                  </div>
+
+                  {/* Step 2 */}
+                  <div
+                    className={`p-3 rounded-xl border transition-all ${
+                      getStepStatus(2) === 'completed'
+                        ? 'bg-purple-950/40 border-purple-500/50 text-purple-200'
+                        : getStepStatus(2) === 'active'
+                        ? 'bg-purple-950/60 border-purple-400 animate-pulse text-purple-100'
+                        : 'bg-slate-950/60 border-slate-800 text-slate-400'
+                    }`}
                   >
-                    Tumbler
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleLoadSample(2)}
-                    className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition-colors"
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-purple-500/20 text-purple-300 text-xs font-bold flex items-center justify-center">
+                        2
+                      </span>
+                      <span className="text-xs font-bold text-white">Agent 1: Analysis</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Category, specs &amp; SEO tags
+                    </p>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div
+                    className={`p-3 rounded-xl border transition-all ${
+                      getStepStatus(3) === 'completed'
+                        ? 'bg-amber-950/40 border-amber-500/50 text-amber-200'
+                        : getStepStatus(3) === 'active'
+                        ? 'bg-amber-950/60 border-amber-400 animate-pulse text-amber-100'
+                        : 'bg-slate-950/60 border-slate-800 text-slate-400'
+                    }`}
                   >
-                    Cushion
-                  </button>
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold flex items-center justify-center">
+                        3
+                      </span>
+                      <span className="text-xs font-bold text-white">Agent 2: Strategy</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Pricing tier &amp; hesitations
+                    </p>
+                  </div>
+
+                  {/* Step 4 */}
+                  <div
+                    className={`p-3 rounded-xl border transition-all ${
+                      getStepStatus(4) === 'completed'
+                        ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-200'
+                        : getStepStatus(4) === 'active'
+                        ? 'bg-emerald-950/60 border-emerald-400 animate-pulse text-emerald-100'
+                        : 'bg-slate-950/60 border-slate-800 text-slate-400'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold flex items-center justify-center">
+                        4
+                      </span>
+                      <span className="text-xs font-bold text-white">Agent 3: Listings</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Shopee, TikTok, Lazada
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Two-Column Grid: Form + Analysis/Listings Display */}
+            {/* Main Workbench: Two-Column Layout */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Left Column: Seller Input Form (5 cols) */}
+              {/* Left Column (5 cols): Input Form + Live Agent Terminal */}
               <div className="lg:col-span-5 space-y-6">
-                <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-lg space-y-4">
+                {/* Input Form Card */}
+                <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
                   <div className="border-b border-slate-800 pb-3">
                     <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
                       <span>📝</span>
                       <span>Raw Product Input Form</span>
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      Enter unorganized product notes or select a sample above.
+                      Enter unorganized product notes or select a demo preset above.
                     </p>
                   </div>
 
                   <form onSubmit={handleCreateAndAnalyze} className="space-y-4">
                     {/* Name */}
                     <div className="space-y-1">
-                      <label htmlFor="product-name" className="text-xs font-semibold text-slate-300 block">
+                      <label
+                        htmlFor="product-name"
+                        className="text-xs font-semibold text-slate-300 block"
+                      >
                         Product Title / Name <span className="text-rose-400">*</span>
                       </label>
                       <input
@@ -505,7 +882,9 @@ export default function App() {
                         required
                         placeholder="e.g. Ergonomic Bluetooth Mechanical Keyboard"
                         value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        onChange={(e) =>
+                          setFormData({ ...formData, name: e.target.value })
+                        }
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                       />
                     </div>
@@ -513,8 +892,11 @@ export default function App() {
                     {/* Price & Quantity Grid */}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
-                        <label htmlFor="product-price" className="text-xs font-semibold text-slate-300 block">
-                          Price ($) <span className="text-rose-400">*</span>
+                        <label
+                          htmlFor="product-price"
+                          className="text-xs font-semibold text-slate-300 block"
+                        >
+                          Price (₱) <span className="text-rose-400">*</span>
                         </label>
                         <input
                           id="product-price"
@@ -522,15 +904,20 @@ export default function App() {
                           step="0.01"
                           min="0.01"
                           required
-                          placeholder="29.99"
+                          placeholder="899.00"
                           value={formData.price}
-                          onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                          onChange={(e) =>
+                            setFormData({ ...formData, price: e.target.value })
+                          }
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors font-mono"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label htmlFor="product-quantity" className="text-xs font-semibold text-slate-300 block">
-                          Stock Quantity
+                        <label
+                          htmlFor="product-quantity"
+                          className="text-xs font-semibold text-slate-300 block"
+                        >
+                          Stock Units
                         </label>
                         <input
                           id="product-quantity"
@@ -538,69 +925,112 @@ export default function App() {
                           min="1"
                           required
                           value={formData.quantity}
-                          onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                          onChange={(e) =>
+                            setFormData({ ...formData, quantity: e.target.value })
+                          }
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors font-mono"
                         />
                       </div>
                     </div>
 
+                    {/* Price Sanity Warning */}
+                    {priceSanityWarning && (
+                      <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-2 shadow-sm">
+                        <span className="text-sm flex-shrink-0">⚠️</span>
+                        <span className="leading-relaxed">{priceSanityWarning}</span>
+                      </div>
+                    )}
+
                     {/* Materials */}
                     <div className="space-y-1">
-                      <label htmlFor="product-materials" className="text-xs font-semibold text-slate-300 block">
+                      <label
+                        htmlFor="product-materials"
+                        className="text-xs font-semibold text-slate-300 block"
+                      >
                         Materials / Composition
                       </label>
                       <input
                         id="product-materials"
                         type="text"
-                        placeholder="e.g. 100% Cotton, Aluminum alloy, BPA-free plastic"
+                        placeholder="e.g. 100% Bamboo wood, recycled ABS, aluminum"
                         value={formData.materials}
-                        onChange={(e) => setFormData({ ...formData, materials: e.target.value })}
+                        onChange={(e) =>
+                          setFormData({ ...formData, materials: e.target.value })
+                        }
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                       />
                     </div>
 
                     {/* Features / Raw Specs */}
                     <div className="space-y-1">
-                      <label htmlFor="product-features" className="text-xs font-semibold text-slate-300 block">
-                        Raw Features &amp; Notes
+                      <label
+                        htmlFor="product-features"
+                        className="text-xs font-semibold text-slate-300 block"
+                      >
+                        Raw Features &amp; Unorganized Notes
                       </label>
                       <textarea
                         id="product-features"
                         rows={4}
-                        placeholder="Paste unorganized bullet points, supplier specs, battery life, dimensions..."
+                        placeholder="Paste unorganized bullet points, supplier specs, dimensions, battery life..."
                         value={formData.features}
-                        onChange={(e) => setFormData({ ...formData, features: e.target.value })}
+                        onChange={(e) =>
+                          setFormData({ ...formData, features: e.target.value })
+                        }
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                       />
                     </div>
 
-                    {/* Dual Action Buttons: Run Agent 1 or Run Full Pipeline */}
+                    {/* Dual Action Buttons */}
                     <div className="space-y-2 pt-1">
                       <button
                         type="button"
                         onClick={handleCreateAndRunFullPipeline}
-                        disabled={submitting || analyzingId !== null || runningPipelineId !== null}
+                        disabled={
+                          submitting ||
+                          analyzingId !== null ||
+                          runningPipelineId !== null
+                        }
                         className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold text-xs sm:text-sm transition-all bg-gradient-to-r from-amber-500 via-indigo-600 to-indigo-700 hover:from-amber-400 hover:to-indigo-600 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-lg shadow-indigo-600/30"
                       >
                         {submitting || runningPipelineId !== null ? (
                           <>
-                            <svg className="animate-spin -ml-1 mr-1 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            <svg
+                              className="animate-spin -ml-1 mr-1 h-4 w-4 text-white"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                            >
+                              <circle
+                                className="opacity-25"
+                                cx="12"
+                                cy="12"
+                                r="10"
+                                stroke="currentColor"
+                                strokeWidth="4"
+                              />
+                              <path
+                                className="opacity-75"
+                                fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                              />
                             </svg>
                             <span>Executing 3-Agent Pipeline...</span>
                           </>
                         ) : (
                           <>
-                            <span>⚡ Submit &amp; Run Full Pipeline (All 3 Agents)</span>
+                            <span>⚡ Submit &amp; Run Full 3-Agent Pipeline</span>
                           </>
                         )}
                       </button>
 
                       <button
                         type="submit"
-                        disabled={submitting || analyzingId !== null || runningPipelineId !== null}
-                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-xs transition-all bg-slate-800 hover:bg-slate-700 active:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={
+                          submitting ||
+                          analyzingId !== null ||
+                          runningPipelineId !== null
+                        }
+                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-xs transition-all bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 disabled:opacity-50"
                       >
                         {analyzingId !== null ? (
                           <span>Analyzing with Agent 1...</span>
@@ -611,207 +1041,284 @@ export default function App() {
                     </div>
                   </form>
                 </div>
+
+                {/* Live Multi-Agent Log Console Component */}
+                <AgentLogsConsole
+                  logs={agentLogs}
+                  isExecuting={isExecutingLogs}
+                  executingAgent={executingAgentName}
+                  onClearLogs={() => setAgentLogs([])}
+                />
               </div>
 
-              {/* Right Column: Structured Analysis & Listings (7 cols) */}
+              {/* Right Column (7 cols): Agent 1, Agent 2 & Agent 3 Cards */}
               <div className="lg:col-span-7 space-y-6">
-                {/* Product Analysis Card (Agent 1) */}
-                <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-lg flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
-                        <h2 className="text-lg font-bold text-white">Agent 1: Structured Profile</h2>
-                      </div>
-                      {selectedProduct && (
-                        <span
-                          className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
-                            selectedProduct.status === 'completed'
-                              ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30'
-                              : selectedProduct.status === 'analyzed'
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                              : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                          }`}
-                        >
-                          {selectedProduct.status === 'completed'
-                            ? '⚡ 3-Agent Pipeline Done'
-                            : selectedProduct.status === 'analyzed'
-                            ? 'AI Analyzed'
-                            : 'Draft'}
-                        </span>
-                      )}
+                {/* Agent 1 Card: Structured Product Profile */}
+                <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-5">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.8)]"></span>
+                      <h2 className="text-lg font-bold text-white">
+                        Agent 1: Structured Profile
+                      </h2>
                     </div>
+                    {selectedProduct && (
+                      <span
+                        className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
+                          selectedProduct.status === 'completed'
+                            ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30'
+                            : selectedProduct.status === 'analyzed'
+                            ? 'bg-purple-500/10 text-purple-400 border border-purple-500/30'
+                            : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                        }`}
+                      >
+                        {selectedProduct.status === 'completed'
+                          ? '⚡ 3-Agent Pipeline Done'
+                          : selectedProduct.status === 'analyzed'
+                          ? 'Analyzed'
+                          : 'Draft'}
+                      </span>
+                    )}
+                  </div>
 
-                    {selectedProduct ? (
-                      <div className="space-y-5">
-                        {/* Product Header Info */}
-                        <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                          <div>
-                            <span className="text-xs text-slate-400 font-mono">ID #{selectedProduct.id}</span>
-                            <h3 className="text-base sm:text-lg font-bold text-white">{selectedProduct.name}</h3>
-                            <div className="flex items-center gap-3 text-xs text-slate-400 mt-1">
-                              <span>Price: <strong className="text-emerald-400 font-mono">${Number(selectedProduct.price).toFixed(2)}</strong></span>
-                              <span>&bull;</span>
-                              <span>Stock: <strong className="text-slate-200 font-mono">{selectedProduct.quantity} units</strong></span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <button
-                              type="button"
-                              onClick={() => handleRunFullPipeline(selectedProduct.id)}
-                              disabled={runningPipelineId === selectedProduct.id}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-400 hover:to-indigo-500 text-white shadow transition-all disabled:opacity-50"
-                            >
-                              {runningPipelineId === selectedProduct.id ? (
-                                'Running Pipeline...'
-                              ) : (
-                                '⚡ Full Pipeline'
-                              )}
-                            </button>
-
-                            {selectedProduct.status !== 'analyzed' && selectedProduct.status !== 'completed' && (
-                              <button
-                                type="button"
-                                onClick={() => handleRunAnalysis(selectedProduct.id)}
-                                disabled={analyzingId === selectedProduct.id}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow transition-all disabled:opacity-50"
-                              >
-                                {analyzingId === selectedProduct.id ? 'Analyzing...' : 'Run Agent 1'}
-                              </button>
-                            )}
+                  {selectedProduct ? (
+                    <div className="space-y-4">
+                      {/* Product Header */}
+                      <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <span className="text-xs text-slate-400 font-mono">
+                            ID #{selectedProduct.id}
+                          </span>
+                          <h3 className="text-base sm:text-lg font-bold text-white">
+                            {selectedProduct.name}
+                          </h3>
+                          <div className="flex items-center gap-3 text-xs text-slate-400 mt-1">
+                            <span>
+                              Price:{' '}
+                              <strong className="text-emerald-400 font-mono">
+                                ₱{Number(selectedProduct.price).toFixed(2)}
+                              </strong>
+                            </span>
+                            <span>&bull;</span>
+                            <span>
+                              Stock:{' '}
+                              <strong className="text-slate-200 font-mono">
+                                {selectedProduct.quantity} units
+                              </strong>
+                            </span>
                           </div>
                         </div>
 
-                        {/* Structured Analysis Content */}
-                        {selectedProduct.analysis ? (
-                          <div className="space-y-4">
-                            {/* Category & Target Audience */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-1">
-                                <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
-                                  Inferred Category
-                                </span>
-                                <span className="inline-block text-sm font-semibold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-1 rounded-lg">
-                                  {selectedProduct.analysis.category || 'General Merchandise'}
-                                </span>
-                              </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => handleRunFullPipeline(selectedProduct.id)}
+                            disabled={runningPipelineId === selectedProduct.id}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-400 hover:to-indigo-500 text-white shadow transition-all disabled:opacity-50"
+                          >
+                            {runningPipelineId === selectedProduct.id
+                              ? 'Running Pipeline...'
+                              : '⚡ Run Full Pipeline'}
+                          </button>
 
-                              <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-1">
-                                <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
-                                  Target Audience
-                                </span>
-                                <span className="text-sm text-slate-200">
-                                  {selectedProduct.analysis.target_audience || 'Everyday consumers'}
-                                </span>
-                              </div>
-                            </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRunAnalysis(selectedProduct.id)}
+                            disabled={analyzingId === selectedProduct.id}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white shadow transition-all disabled:opacity-50"
+                          >
+                            {analyzingId === selectedProduct.id
+                              ? 'Analyzing...'
+                              : 'Re-run Agent 1'}
+                          </button>
+                        </div>
+                      </div>
 
-                            {/* Key Selling Points */}
-                            {selectedProduct.analysis.selling_points && selectedProduct.analysis.selling_points.length > 0 && (
-                              <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-2">
-                                <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
-                                  Key Selling Points (Value Propositions)
-                                </span>
-                                <ul className="space-y-1.5 text-xs sm:text-sm text-slate-300">
-                                  {selectedProduct.analysis.selling_points.map((point, idx) => (
-                                    <li key={idx} className="flex items-start gap-2">
-                                      <svg className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
-                                      </svg>
-                                      <span>{point}</span>
-                                    </li>
+                      {/* Structured Analysis Content */}
+                      {selectedProduct.analysis ? (
+                        <div className="space-y-4">
+                          {/* Unverified Claims Guardrail Alert */}
+                          {selectedProduct.analysis.market_insights?.unverified_claims &&
+                            selectedProduct.analysis.market_insights.unverified_claims.length > 0 && (
+                              <div className="space-y-2">
+                                {selectedProduct.analysis.market_insights.unverified_claims.map((claim, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-sm"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm flex-shrink-0">⚠️</span>
+                                      <span>
+                                        <strong>Unverified Claim:</strong> &ldquo;{claim.claim}&rdquo; &rarr; softened to &ldquo;<em>{claim.softened}</em>&rdquo;
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 self-start sm:self-center flex-shrink-0">
+                                      Claim Softened
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                          {/* Thin Input Suggested Questions */}
+                          {selectedProduct.analysis.market_insights?.suggested_questions &&
+                            selectedProduct.analysis.market_insights.suggested_questions.length > 0 && (
+                              <div className="bg-indigo-950/40 border border-indigo-500/30 rounded-xl p-3.5 text-xs text-indigo-200 space-y-2 shadow-sm">
+                                <div className="flex items-center gap-1.5 font-bold text-indigo-300">
+                                  <span>💡</span>
+                                  <span>Thin Input Detected &bull; Suggested Seller Follow-up Questions:</span>
+                                </div>
+                                <ul className="list-disc list-inside space-y-1 text-slate-300 pl-1">
+                                  {selectedProduct.analysis.market_insights.suggested_questions.map((q, idx) => (
+                                    <li key={idx}>{q}</li>
                                   ))}
                                 </ul>
                               </div>
                             )}
 
-                            {/* Suggested SEO Keywords */}
-                            {selectedProduct.analysis.suggested_keywords && selectedProduct.analysis.suggested_keywords.length > 0 && (
+                          {/* Product Price Notice */}
+                          {selectedProduct.analysis.market_insights?.price_warning && (
+                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-200 flex items-center gap-2">
+                              <span className="text-sm flex-shrink-0">⚠️</span>
+                              <span>{selectedProduct.analysis.market_insights.price_warning}</span>
+                            </div>
+                          )}
+
+                          {/* Category & Audience */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-1">
+                              <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
+                                Inferred Category
+                              </span>
+                              <span className="inline-block text-sm font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2.5 py-1 rounded-lg">
+                                {selectedProduct.analysis.category ||
+                                  'General Merchandise'}
+                              </span>
+                            </div>
+
+                            <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-1">
+                              <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
+                                Target Demographic
+                              </span>
+                              <span className="text-sm text-slate-200">
+                                {selectedProduct.analysis.target_audience ||
+                                  'Value-conscious shoppers'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Key Selling Points */}
+                          {selectedProduct.analysis.selling_points &&
+                            selectedProduct.analysis.selling_points.length > 0 && (
+                              <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-2">
+                                <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
+                                  Key Value Propositions
+                                </span>
+                                <ul className="space-y-1.5 text-xs sm:text-sm text-slate-300">
+                                  {selectedProduct.analysis.selling_points.map(
+                                    (point, idx) => (
+                                      <li
+                                        key={idx}
+                                        className="flex items-start gap-2"
+                                      >
+                                        <svg
+                                          className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          viewBox="0 0 24 24"
+                                        >
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth="2.5"
+                                            d="M5 13l4 4L19 7"
+                                          />
+                                        </svg>
+                                        <span>{point}</span>
+                                      </li>
+                                    )
+                                  )}
+                                </ul>
+                              </div>
+                            )}
+
+                          {/* SEO Keywords */}
+                          {selectedProduct.analysis.suggested_keywords &&
+                            selectedProduct.analysis.suggested_keywords.length >
+                              0 && (
                               <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-2">
                                 <div className="flex items-center justify-between">
                                   <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
-                                    Suggested SEO Keywords (Click to copy)
+                                    High-Intent SEO Keywords (Click to copy)
                                   </span>
                                   {copiedKeyword && (
-                                    <span className="text-[11px] text-emerald-400 font-medium">Copied &ldquo;{copiedKeyword}&rdquo;!</span>
+                                    <span className="text-[11px] text-emerald-400 font-medium animate-pulse">
+                                      Copied &ldquo;{copiedKeyword}&rdquo;!
+                                    </span>
                                   )}
                                 </div>
                                 <div className="flex flex-wrap gap-1.5">
-                                  {selectedProduct.analysis.suggested_keywords.map((kw, idx) => (
-                                    <button
-                                      key={idx}
-                                      type="button"
-                                      onClick={() => handleCopyKeyword(kw)}
-                                      className="text-xs bg-slate-900 hover:bg-slate-800 text-indigo-300 hover:text-white border border-slate-800 hover:border-indigo-500/50 px-2.5 py-1 rounded-md transition-colors font-mono"
-                                    >
-                                      #{kw}
-                                    </button>
-                                  ))}
+                                  {selectedProduct.analysis.suggested_keywords.map(
+                                    (kw, idx) => (
+                                      <button
+                                        key={idx}
+                                        type="button"
+                                        onClick={() => handleCopyKeyword(kw)}
+                                        className="text-xs bg-slate-900 hover:bg-slate-800 text-indigo-300 hover:text-white border border-slate-800 hover:border-indigo-500/50 px-2.5 py-1 rounded-md transition-colors font-mono"
+                                      >
+                                        #{kw}
+                                      </button>
+                                    )
+                                  )}
                                 </div>
                               </div>
                             )}
 
-                            {/* Specifications / Raw Summary */}
-                            {selectedProduct.analysis.raw_summary && (
-                              <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-1">
-                                <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
-                                  Agent Synthesis Summary
-                                </span>
-                                <p className="text-xs text-slate-300 leading-relaxed font-mono">
-                                  {selectedProduct.analysis.raw_summary}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="text-center py-10 space-y-3 bg-slate-950/40 rounded-xl border border-slate-800 border-dashed">
-                            <p className="text-sm text-slate-400">
-                              This product has not been analyzed yet.
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() => handleRunAnalysis(selectedProduct.id)}
-                              disabled={analyzingId === selectedProduct.id}
-                              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow"
-                            >
-                              Run Agent 1 Analysis Now
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      /* Empty State */
-                      <div className="text-center py-12 space-y-4 bg-slate-950/30 rounded-xl border border-slate-800/80 border-dashed p-6">
-                        <div className="w-12 h-12 mx-auto rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
-                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                          </svg>
+                          {/* Raw Summary */}
+                          {selectedProduct.analysis.raw_summary && (
+                            <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-1">
+                              <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
+                                Profiling Summary
+                              </span>
+                              <p className="text-xs text-slate-300 leading-relaxed font-mono">
+                                {selectedProduct.analysis.raw_summary}
+                              </p>
+                            </div>
+                          )}
                         </div>
-                        <div className="space-y-1">
-                          <h4 className="text-base font-bold text-white">No Product Selected</h4>
-                          <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                            Submit a product using the form or select one from the catalog below to inspect Agent 1&apos;s output.
+                      ) : (
+                        <div className="text-center py-8 space-y-3 bg-slate-950/40 rounded-xl border border-slate-800 border-dashed">
+                          <p className="text-sm text-slate-400">
+                            This product has not been analyzed yet.
                           </p>
+                          <button
+                            type="button"
+                            onClick={() => handleRunAnalysis(selectedProduct.id)}
+                            disabled={analyzingId === selectedProduct.id}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow"
+                          >
+                            Run Agent 1 Analysis Now
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => handleLoadSample(0)}
-                          className="text-xs text-indigo-400 hover:text-indigo-300 font-medium underline underline-offset-4"
-                        >
-                          Load demo sample into form
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-500">
-                    <span>Engine: Multi-Agent AI (OpenAI GPT-4o-mini &amp; Deterministic Fallback)</span>
-                    <span>PostgreSQL (Neon)</span>
-                  </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-10 text-slate-500 text-sm">
+                      Select or add a product to inspect Agent 1&apos;s output.
+                    </div>
+                  )}
                 </div>
 
-                {/* Sprint 3: Multi-Platform Listing Preview Component (Agent 3) */}
+                {/* Agent 2 Card: Market Strategy */}
+                {selectedProduct && (
+                  <MarketStrategyCard
+                    product={selectedProduct}
+                    onRunMarketAnalysis={handleRunMarketAnalysis}
+                    isRunning={runningMarketId === selectedProduct.id}
+                  />
+                )}
+
+                {/* Agent 3 Card: Multi-Platform Listings */}
                 {selectedProduct && (
                   <ListingPreview
                     product={selectedProduct}
@@ -821,40 +1328,68 @@ export default function App() {
                     isRunningPipeline={runningPipelineId === selectedProduct.id}
                     copied={copied}
                     setCopied={setCopied}
+                    apiUrl={apiUrl}
+                    onListingUpdated={fetchProducts}
                   />
                 )}
               </div>
             </div>
 
-            {/* Product Catalog List (Bottom Section) */}
-            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-lg space-y-4">
+            {/* Bottom Saved Products Catalog */}
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
                 <div>
-                  <h3 className="text-base font-bold text-white">Saved Product Catalog</h3>
+                  <h3 className="text-base font-bold text-white">
+                    Saved Product Catalog
+                  </h3>
                   <p className="text-xs text-slate-400">
-                    Live records persisted in Neon PostgreSQL ({products.length} products stored)
+                    Live records in Neon PostgreSQL ({products.length} products stored)
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={fetchProducts}
-                  disabled={productsLoading}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors disabled:opacity-50"
-                >
-                  <svg className={`w-3.5 h-3.5 ${productsLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  <span>{productsLoading ? 'Refreshing...' : 'Refresh Catalog'}</span>
-                </button>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Search catalog..."
+                    value={catalogSearch}
+                    onChange={(e) => setCatalogSearch(e.target.value)}
+                    className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 w-44 sm:w-60"
+                  />
+                  <button
+                    type="button"
+                    onClick={fetchProducts}
+                    disabled={productsLoading}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors disabled:opacity-50"
+                  >
+                    <svg
+                      className={`w-3.5 h-3.5 ${
+                        productsLoading ? 'animate-spin' : ''
+                      }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                      />
+                    </svg>
+                    <span>{productsLoading ? 'Refreshing...' : 'Refresh'}</span>
+                  </button>
+                </div>
               </div>
 
-              {products.length === 0 ? (
+              {filteredCatalog.length === 0 ? (
                 <div className="text-center py-8 text-xs text-slate-500">
-                  No products in database yet. Use the form above to add your first product.
+                  {catalogSearch
+                    ? 'No products match your search query.'
+                    : 'No products in database yet. Use the form above to add your first product.'}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {products.map((p) => {
+                  {filteredCatalog.map((p) => {
                     const isSelected = selectedProduct?.id === p.id;
                     const hasListings = p.listings && p.listings.length > 0;
                     return (
@@ -863,18 +1398,20 @@ export default function App() {
                         onClick={() => setSelectedProduct(p)}
                         className={`cursor-pointer rounded-xl p-4 border transition-all text-left space-y-2 ${
                           isSelected
-                            ? 'bg-indigo-950/40 border-indigo-500/80 shadow-md shadow-indigo-500/10'
+                            ? 'bg-indigo-950/40 border-indigo-500/80 shadow-md shadow-indigo-500/10 ring-1 ring-indigo-500/50'
                             : 'bg-slate-950/70 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/60'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <h4 className="font-bold text-sm text-white line-clamp-1">{p.name}</h4>
+                          <h4 className="font-bold text-sm text-white line-clamp-1">
+                            {p.name}
+                          </h4>
                           <span
                             className={`text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
                               p.status === 'completed' || hasListings
                                 ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30'
                                 : p.status === 'analyzed'
-                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
                                 : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                             }`}
                           >
@@ -886,9 +1423,13 @@ export default function App() {
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-xs text-slate-400">
-                          <span className="font-mono text-emerald-400 font-semibold">${Number(p.price).toFixed(2)}</span>
-                          <span className="font-mono text-slate-400">Qty: {p.quantity}</span>
-                          <span className="text-slate-500 text-[11px]">
+                          <span className="font-mono text-emerald-400 font-semibold">
+                            ₱{Number(p.price).toFixed(2)}
+                          </span>
+                          <span className="font-mono text-slate-400">
+                            Qty: {p.quantity}
+                          </span>
+                          <span className="text-slate-500 text-[11px] truncate max-w-[120px]">
                             {p.analysis?.category || 'Uncategorized'}
                           </span>
                         </div>
@@ -901,7 +1442,7 @@ export default function App() {
           </div>
         ) : (
           /* ========================================================================= */
-          /* SPRINT 1 DEVOPS: LIVE HEALTH MONITOR                                      */
+          /* DEVOPS: LIVE HEALTH MONITOR                                               */
           /* ========================================================================= */
           <div className="max-w-3xl mx-auto space-y-6">
             <header className="text-center space-y-2">
@@ -913,7 +1454,7 @@ export default function App() {
                 Live System Health Monitor
               </h2>
               <p className="text-sm text-slate-400">
-                Vite + React frontend monitoring FastAPI backend &amp; Neon PostgreSQL health
+                React Vite frontend monitoring FastAPI backend &amp; Neon PostgreSQL health
               </p>
             </header>
 
@@ -922,13 +1463,15 @@ export default function App() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs sm:text-sm">
                 <div>
                   <span className="text-slate-400 font-medium">Target Health URL:</span>{' '}
-                  <code className="text-indigo-300 bg-slate-950 px-2 py-1 rounded border border-slate-800 break-all">
+                  <code className="text-indigo-300 bg-slate-950 px-2 py-1 rounded border border-slate-800 break-all font-mono">
                     {healthEndpoint}
                   </code>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-slate-400">Last checked:</span>
-                  <span className="font-mono text-slate-200">{lastChecked || 'Not checked yet'}</span>
+                  <span className="font-mono text-slate-200">
+                    {lastChecked || 'Not checked yet'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -991,16 +1534,41 @@ export default function App() {
                 >
                   {healthLoading ? (
                     <>
-                      <svg className="animate-spin -ml-1 mr-1 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      <svg
+                        className="animate-spin -ml-1 mr-1 h-4 w-4 text-white"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        />
                       </svg>
                       <span>Checking...</span>
                     </>
                   ) : (
                     <>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                        />
                       </svg>
                       <span>Re-check Health</span>
                     </>
@@ -1013,12 +1581,24 @@ export default function App() {
             {healthError && (
               <div className="bg-rose-950/40 border border-rose-800/60 rounded-xl p-4 text-rose-200 text-sm space-y-1">
                 <div className="flex items-center gap-2 font-semibold text-rose-300">
-                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  <svg
+                    className="w-5 h-5 flex-shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                    />
                   </svg>
                   <span>Connection Warning</span>
                 </div>
-                <p className="font-mono text-xs text-rose-300/90 break-words pl-7">{healthError}</p>
+                <p className="font-mono text-xs text-rose-300/90 break-words pl-7">
+                  {healthError}
+                </p>
               </div>
             )}
 
@@ -1026,7 +1606,7 @@ export default function App() {
             <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 sm:p-5 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
-                  Raw Response Payload
+                  Raw Health Payload
                 </span>
                 {statusCode && (
                   <span
@@ -1044,7 +1624,11 @@ export default function App() {
                 {healthData
                   ? JSON.stringify(healthData, null, 2)
                   : healthError
-                  ? JSON.stringify({ error: healthError, target: healthEndpoint }, null, 2)
+                  ? JSON.stringify(
+                      { error: healthError, target: healthEndpoint },
+                      null,
+                      2
+                    )
                   : '// Waiting for response...'}
               </pre>
             </div>
@@ -1052,10 +1636,10 @@ export default function App() {
         )}
       </main>
 
-      {/* Persistent Global Footer */}
-      <footer className="border-t border-slate-800/80 bg-slate-900/50 py-4 px-4 text-center text-xs text-slate-500 space-y-1">
+      {/* Global Footer */}
+      <footer className="border-t border-slate-800/80 bg-slate-950/60 py-4 px-4 text-center text-xs text-slate-500 space-y-1">
         <p>
-          Online Seller Assistant &bull; AI Engineering &amp; Autonomous Multi-Agent System &bull; Sprint 3
+          Online Seller Assistant &bull; Autonomous Multi-Agent AI System &bull; Sprint 3
         </p>
         <p className="text-[11px] text-slate-600 font-mono">
           FastAPI &bull; Neon PostgreSQL &bull; React Vite &bull; Tailwind CSS &bull; Render &bull; Vercel

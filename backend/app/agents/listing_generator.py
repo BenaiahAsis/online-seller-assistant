@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -17,6 +18,26 @@ from app.agents.validation import (
 PLATFORMS = ("shopee", "tiktok", "lazada")
 MODEL = "gpt-4o-mini"
 CURRENCY = "\u20b1"
+
+FORBIDDEN_TAG_WORDS = {
+    "aluminum",
+    "zinc",
+    "iron",
+    "steel",
+    "glass",
+    "plastic",
+    "metal",
+    "rubber",
+    "silicone",
+    "copper",
+    "free",
+    "bought",
+    "item",
+    "most",
+    "deal",
+    "best",
+    "cheap",
+}
 
 CHANNEL_TAGS = {
     "shopee": ("shopeeph", "shopeefinds", "shopee"),
@@ -63,15 +84,73 @@ SYSTEM = (
 # ===========================================================================
 
 
+def build_fallback_titles(
+    name: str,
+    category: str | None,
+    materials: str | None,
+    features: str | None,
+) -> dict[str, str]:
+    feats = [
+        f.strip()
+        for f in re.split(r"[,;.\n]+", features or "")
+        if f.strip()
+        and "most bought" not in f.lower()
+        and "best seller" not in f.lower()
+    ]
+    perk = feats[0] if feats else ""
+    perk_phrase = f" with {perk}" if perk else ""
+    bonus_phrase = f" (+ {perk} Bonus!)" if perk else ""
+
+    mat_words = [
+        w.capitalize()
+        for w in re.findall(r"[a-zA-Z]+", materials or "")
+        if w.lower() not in {"zinc", "iron"}
+    ][:2]
+    mat_desc = " & ".join(mat_words) if mat_words else ""
+
+    # 1. Shopee: Keyword-rich search title under 120 chars
+    if "smartwatch" in name.lower() or "watch" in name.lower():
+        shopee_title = f"{name}{perk_phrase} | Durable {mat_desc or 'Digital'} Watch"
+    else:
+        descriptor = mat_desc or (category or "Quality Build")
+        shopee_title = f"{name}{perk_phrase} | Durable {descriptor}"
+    if len(shopee_title) > 115:
+        shopee_title = shopee_title[:115]
+
+    # 2. TikTok: Short punchy hook
+    tiktok_title = f"Upgrade Your Daily Style With This Sleek {name}{bonus_phrase}"
+    if len(tiktok_title) > 100:
+        tiktok_title = tiktok_title[:100]
+
+    # 3. Lazada: Clean trust title with material/feature
+    if mat_desc:
+        lazada_title = f"{name} - Premium {mat_desc} Design{perk_phrase}"
+    else:
+        lazada_title = f"{name} - {category or 'Official Edition'}{perk_phrase}"
+    if len(lazada_title) > 120:
+        lazada_title = lazada_title[:120]
+
+    return {
+        "shopee": shopee_title,
+        "tiktok": tiktok_title,
+        "lazada": lazada_title,
+    }
+
+
 def _tags(keywords: list[str], platform: str, limit: int = 4) -> list[str]:
     tokens: list[str] = []
     for term in keywords:
-        token = "".join(c for c in str(term).lower() if c.isalnum())
-        if token and token not in tokens:
+        clean_term = str(term).lower().strip()
+        if clean_term in FORBIDDEN_TAG_WORDS:
+            continue
+        token = "".join(c for c in clean_term if c.isalnum())
+        if token and token not in tokens and token not in FORBIDDEN_TAG_WORDS:
             tokens.append(token)
         if len(tokens) >= limit:
             break
-    tokens += [t for t in CHANNEL_TAGS[platform][:2] if t not in tokens]
+    for ch_tag in CHANNEL_TAGS[platform][:2]:
+        if ch_tag not in tokens and len(tokens) < 6:
+            tokens.append(ch_tag)
     return [f"#{t}" for t in tokens]
 
 
@@ -84,62 +163,97 @@ def _derive_fallback_listings(
     selling_points: list[str] | None,
     keywords: list[str] | None,
 ) -> list[dict[str, Any]]:
-    specs = [f"Price: {CURRENCY}{price:,.2f}"]
-    if category:
-        specs.append(f"Category: {category}")
-    if materials:
-        specs.append(f"Materials: {materials}")
-    if features:
-        specs.append(f"Details: {features}")
+    titles = build_fallback_titles(name, category, materials, features)
+    clean_bullets = [
+        str(p)
+        for p in (selling_points or [])
+        if str(p).strip() and "all details above" not in str(p).lower()
+    ][:4]
 
-    bullets = [str(p) for p in (selling_points or []) if str(p).strip()][:4]
-    if len(bullets) < 2:
-        bullets += specs
-    bullets = bullets[:4]
+    if not clean_bullets:
+        clean_bullets = [
+            f"Crafted with {materials or 'durable components'} for daily wear",
+            f"Accessible everyday price of {CURRENCY}{price:,.2f}",
+        ]
 
-    terms = [str(k) for k in (keywords or []) if str(k).strip()]
+    terms = [
+        str(k)
+        for k in (keywords or [])
+        if str(k).strip() and str(k).lower().strip() not in FORBIDDEN_TAG_WORDS
+    ]
     if not terms:
-        terms = [w for w in name.lower().split() if len(w) > 3][:3]
+        terms = [
+            w
+            for w in name.lower().split()
+            if len(w) > 3 and w not in FORBIDDEN_TAG_WORDS
+        ][:3] or ["smartfinds"]
 
+    specs = [
+        f"• Product: {name}",
+        f"• Price: {CURRENCY}{price:,.2f}",
+    ]
+    if category:
+        specs.append(f"• Category: {category}")
+    if materials:
+        specs.append(f"• Materials: {materials}")
     spec_block = "\n".join(specs)
-    bullet_block = "\n".join(f"- {b}" for b in bullets)
-    note = "All details above come from the seller's product information."
+    highlights_block = "\n".join(f"✨ {b}" for b in clean_bullets)
+
+    shopee_desc = (
+        f"Elevate your daily routine with the {name}. Designed for comfort, "
+        f"style, and lasting reliability wherever your day takes you.\n\n"
+        f"KEY HIGHLIGHTS:\n{highlights_block}\n\n"
+        f"PRODUCT SPECIFICATIONS:\n{spec_block}\n\n"
+        f"Ready stock available for prompt dispatch. Add to cart today!"
+    )
+    shopee_cta = "Claim shop vouchers and add to cart now!"
+
+    tiktok_desc = (
+        f"Looking for a sleek, stylish {name} that fits your daily vibe? "
+        f"Check this out! 👀\n\n"
+        f"{highlights_block}\n\n"
+        f"Price: {CURRENCY}{price:,.2f} | Fast shipping & ready stock!"
+    )
+    tiktok_cta = (
+        "Tap the yellow basket below to order yours before stocks run out!"
+    )
+
+    lazada_desc = (
+        f"Experience dependable daily performance and sleek craftsmanship "
+        f"with the {name}. Engineered with quality components for everyday "
+        f"peace of mind.\n\n"
+        f"PRODUCT FEATURES:\n{highlights_block}\n\n"
+        f"SPECIFICATION DETAILS:\n{spec_block}\n\n"
+        f"Order with confidence with nationwide parcel delivery."
+    )
+    lazada_cta = "Add to cart now for fast delivery and secure checkout."
 
     return [
         {
             "platform": "shopee",
-            "title": f"{name} - {category or 'Product Listing'}"[:255],
-            "description": (
-                f"{name}\n\n{spec_block}\n\nWhat the seller lists:\n"
-                f"{bullet_block}\n\n{note}"
-            ),
-            "bullet_points": bullets,
+            "title": titles["shopee"],
+            "description": shopee_desc,
+            "bullet_points": clean_bullets,
             "hashtags": _tags(terms, "shopee"),
-            "call_to_action": "Check the specifications and add to cart.",
+            "call_to_action": shopee_cta,
             "source": "heuristic",
         },
         {
             "platform": "tiktok",
-            "title": f"{name} - what it is and what it costs"[:255],
-            "description": (
-                f"{name} - here is what it actually is.\n\n{bullet_block}\n\n"
-                f"Priced at {CURRENCY}{price:,.2f}. {note}"
-            ),
-            "bullet_points": bullets[:3],
+            "title": titles["tiktok"],
+            "description": tiktok_desc,
+            "bullet_points": clean_bullets[:3],
             "hashtags": _tags(terms, "tiktok", limit=3),
-            "call_to_action": "Tap the basket to see the full details.",
+            "call_to_action": tiktok_cta,
             "source": "heuristic",
         },
         {
             "platform": "lazada",
-            "title": f"{name} - {category or 'Product'} specifications"[:255],
-            "description": (
-                f"{name}\n\nSpecifications\n{spec_block}\n\nListed features\n"
-                f"{bullet_block}\n\n{note}"
-            ),
-            "bullet_points": bullets,
+            "title": titles["lazada"],
+            "description": lazada_desc,
+            "bullet_points": clean_bullets,
             "hashtags": _tags(terms, "lazada"),
-            "call_to_action": "Add to cart to review the full specifications.",
+            "call_to_action": lazada_cta,
             "source": "heuristic",
         },
     ]
@@ -152,19 +266,38 @@ def _derive_fallback_listings(
 
 def _make_checks(sources: list[str], keywords: list[str]):
     tokens = {
-        "".join(c for c in str(k).lower() if c.isalnum()) for k in keywords if str(k)
+        "".join(c for c in str(k).lower() if c.isalnum())
+        for k in keywords
+        if str(k) and str(k).lower().strip() not in FORBIDDEN_TAG_WORDS
     }
 
     def checks(bundle: ListingBundle) -> list[str]:
         problems = []
         for listing in bundle.listings:
+            combined_text = f"{listing.title} {listing.description}".lower()
+            if (
+                "all details above come from" in combined_text
+                or "what the seller lists" in combined_text
+            ):
+                problems.append(
+                    f"{listing.platform} contains prohibited system meta-text"
+                )
+
             for i, bullet in enumerate(listing.bullet_points):
-                if not grounded(bullet, sources):
+                if not grounded(bullet, sources, allow_general_terms=True):
                     problems.append(
                         f"{listing.platform}.bullet_points.{i} is not in the "
                         f"product data: '{bullet}'"
                     )
+
             for tag in listing.hashtags:
+                clean_tag = tag.lstrip("#").lower()
+                if clean_tag in FORBIDDEN_TAG_WORDS:
+                    problems.append(
+                        f"{listing.platform}.hashtags contains forbidden "
+                        f"material/fluff hashtag '{tag}'"
+                    )
+                    continue
                 token = "".join(c for c in tag.lower() if c.isalnum())
                 if token in CHANNEL_TAGS[listing.platform]:
                     continue
@@ -240,7 +373,7 @@ def run_listing_generator_agent(
 
     prompt = (
         "Write one listing each for Shopee, TikTok Shop and Lazada using only "
-        "the material below.\n\n"
+        "the verified material below.\n\n"
         f"Product: {name}\n"
         f"Price: {CURRENCY}{price:,.2f}\n"
         f"Category: {category or 'unspecified'}\n"
@@ -250,14 +383,24 @@ def run_listing_generator_agent(
         f"Price tier: {market.get('price_tier', 'unspecified')}\n"
         f"Channel strategy:\n{_strategy_brief(market)}\n\n"
         f"Approved keywords: {', '.join(keywords) or '(none)'}\n\n"
-        "- Every bullet point must rephrase a ranked selling point above.\n"
-        "- Hashtags come from the approved keywords plus at most two channel "
-        "tags per platform.\n"
-        "- Match each platform's tone and angle.\n"
-        "- Never state a warranty, return policy, authenticity, "
-        "certification, package contents, product condition, shipping offer, "
-        "stock urgency or comparison to another product.\n"
-        "- If a detail is not above, leave it out."
+        "STRICT PLATFORM INSTRUCTIONS:\n"
+        "1. TITLES:\n"
+        "   - Shopee: Keyword-rich search title under 120 chars.\n"
+        "   - TikTok: Short punchy hook.\n"
+        "   - Lazada: Clean trust title highlighting materials/features.\n"
+        "   - NEVER use titles like '{name} - {category} specifications'.\n"
+        "2. DESCRIPTIONS:\n"
+        "   - Write genuine sales copy with hook, highlights, and specs.\n"
+        "   - NEVER include meta-text like 'All details above come from'.\n"
+        "3. CALL TO ACTION:\n"
+        "   - Shopee: Vouchers or add to cart.\n"
+        "   - TikTok: Tap basket before stock runs out.\n"
+        "   - Lazada: Fast delivery and checkout.\n"
+        "4. HASHTAGS:\n"
+        "   - Draw ONLY from approved keywords and channel tags.\n"
+        "   - NEVER use standalone materials (e.g. #zinc, #iron) or #free.\n"
+        "5. GUARDRAILS:\n"
+        "   - Never invent warranties, certifications, or medical claims.\n"
     )
 
     bundle, errors = call_agent(

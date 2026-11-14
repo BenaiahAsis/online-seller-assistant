@@ -34,6 +34,7 @@ class ProductAnalysisResponse(BaseModel):
     suggested_keywords: list[str] | None = None
     market_insights: dict[str, Any] | None = None
     raw_summary: str | None = None
+    execution_logs: list[dict[str, Any]] | None = None
     created_at: datetime
 
 
@@ -49,6 +50,14 @@ class ProductListingResponse(BaseModel):
     hashtags: list[str] = Field(default_factory=list)
     call_to_action: str | None = None
     created_at: datetime
+
+
+class ListingUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    bullet_points: list[str] | None = None
+    hashtags: list[str] | None = None
+    call_to_action: str | None = None
 
 
 class ProductResponse(ProductBase):
@@ -70,3 +79,4 @@ class FullPipelineResponse(BaseModel):
     product: ProductResponse
     status: str
     message: str
+    logs: list[dict[str, Any]] = Field(default_factory=list)

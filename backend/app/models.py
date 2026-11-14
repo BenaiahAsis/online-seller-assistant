@@ -61,6 +61,9 @@ class ProductAnalysis(Base):
     suggested_keywords: Mapped[list | None] = mapped_column(JSON, nullable=True)
     market_insights: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     raw_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    execution_logs: Mapped[list | None] = mapped_column(
+        JSON, default=list, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

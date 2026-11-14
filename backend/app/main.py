@@ -1,7 +1,7 @@
 import logging
 import os
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.agents import (
+    generate_agent_1_logs,
+    generate_agent_2_logs,
+    generate_agent_3_logs,
     run_listing_generator_agent,
     run_market_analyzer_agent,
     run_product_analysis_agent,
@@ -18,6 +21,7 @@ from app.database import check_database_connection, get_db, init_db
 from app.models import Product, ProductAnalysis, ProductListing
 from app.schemas import (
     FullPipelineResponse,
+    ListingUpdate,
     ProductCreate,
     ProductListingResponse,
     ProductListResponse,
@@ -47,7 +51,13 @@ allowed_origins = [
     origin.strip() for origin in cors_origins_env.split(",") if origin.strip()
 ]
 if not allowed_origins:
-    allowed_origins = ["http://localhost:5173"]
+    allowed_origins = [
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+        "http://localhost:3000",
+    ]
 
 
 @app.middleware("http")
@@ -229,6 +239,11 @@ def trigger_product_analysis(product_id: int, db: Annotated[Session, Depends(get
         "features": product.features,
     }
     analysis_result = run_product_analysis_agent(input_data)
+    agent_1_logs = generate_agent_1_logs(
+        input_data,
+        analysis_result,
+        source="ai" if os.getenv("OPENAI_API_KEY") else "heuristic",
+    )
 
     if product.analysis:
         analysis = product.analysis
@@ -238,6 +253,12 @@ def trigger_product_analysis(product_id: int, db: Annotated[Session, Depends(get
         analysis.selling_points = analysis_result.get("selling_points")
         analysis.suggested_keywords = analysis_result.get("suggested_keywords")
         analysis.raw_summary = analysis_result.get("raw_summary")
+        analysis.execution_logs = agent_1_logs
+        current_insights = analysis.market_insights or {}
+        analysis.market_insights = {
+            **current_insights,
+            **(analysis_result.get("market_insights") or {}),
+        }
     else:
         analysis = ProductAnalysis(
             product_id=product.id,
@@ -247,6 +268,8 @@ def trigger_product_analysis(product_id: int, db: Annotated[Session, Depends(get
             selling_points=analysis_result.get("selling_points"),
             suggested_keywords=analysis_result.get("suggested_keywords"),
             raw_summary=analysis_result.get("raw_summary"),
+            execution_logs=agent_1_logs,
+            market_insights=analysis_result.get("market_insights"),
         )
         db.add(analysis)
 
@@ -293,8 +316,20 @@ def trigger_market_analysis(product_id: int, db: Annotated[Session, Depends(get_
     }
 
     market_result = run_market_analyzer_agent(product_data, analysis_data)
+    agent_2_logs = generate_agent_2_logs(product_data, analysis_data, market_result)
+
     if product.analysis:
-        product.analysis.market_insights = market_result
+        current_insights = product.analysis.market_insights or {}
+        product.analysis.market_insights = {
+            **current_insights,
+            **market_result,
+        }
+        current_logs = [
+            log
+            for log in (product.analysis.execution_logs or [])
+            if not str(log.get("agent", "")).startswith("Agent 2")
+        ]
+        product.analysis.execution_logs = current_logs + agent_2_logs
 
     db.commit()
     db.refresh(product)
@@ -341,6 +376,7 @@ def trigger_listing_generation(
     listings_result = run_listing_generator_agent(
         product_data, analysis_data, market_data
     )
+    agent_3_logs = generate_agent_3_logs(product_data, listings_result)
 
     # Replace existing listings with freshly generated versions
     stmt = select(ProductListing).where(ProductListing.product_id == product.id)
@@ -361,6 +397,14 @@ def trigger_listing_generation(
         )
         db.add(listing)
         saved_listings.append(listing)
+
+    if product.analysis:
+        current_logs = [
+            log
+            for log in (product.analysis.execution_logs or [])
+            if not str(log.get("agent", "")).startswith("Agent 3")
+        ]
+        product.analysis.execution_logs = current_logs + agent_3_logs
 
     product.status = "completed"
     db.commit()
@@ -393,11 +437,62 @@ def trigger_full_pipeline(product_id: int, db: Annotated[Session, Depends(get_db
     trigger_listing_generation(product_id=product_id, db=db)
 
     db.refresh(product)
+    pipeline_logs = (product.analysis.execution_logs or []) if product.analysis else []
     return FullPipelineResponse(
         product=product,
         status="completed",
         message="Full 3-agent pipeline successfully executed.",
+        logs=pipeline_logs,
     )
+
+
+@app.get(
+    "/api/products/{product_id}/logs",
+    response_model=list[dict[str, Any]],
+    tags=["Agents"],
+)
+def get_product_logs(product_id: int, db: Annotated[Session, Depends(get_db)]):
+    """Retrieve full audit and execution logs for all agents on a product."""
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Product with ID {product_id} not found.",
+        )
+    return (product.analysis.execution_logs or []) if product.analysis else []
+
+
+@app.patch(
+    "/api/listings/{listing_id}",
+    response_model=ProductListingResponse,
+    tags=["Listings"],
+)
+def update_product_listing(
+    listing_id: int,
+    payload: ListingUpdate,
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Allow sellers to customize title, description, or bullets of a listing."""
+    listing = db.get(ProductListing, listing_id)
+    if not listing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Listing with ID {listing_id} not found.",
+        )
+    if payload.title is not None:
+        listing.title = payload.title.strip()
+    if payload.description is not None:
+        listing.description = payload.description.strip()
+    if payload.bullet_points is not None:
+        listing.bullet_points = payload.bullet_points
+    if payload.hashtags is not None:
+        listing.hashtags = payload.hashtags
+    if payload.call_to_action is not None:
+        listing.call_to_action = payload.call_to_action.strip()
+
+    db.commit()
+    db.refresh(listing)
+    return listing
 
 
 @app.get(
