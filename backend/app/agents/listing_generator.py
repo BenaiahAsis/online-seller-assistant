@@ -15,6 +15,7 @@ from app.agents.validation import (
     events_to_reasons,
     grounded,
     skipped_event,
+    words,
 )
 from app.config import settings
 
@@ -265,7 +266,15 @@ def _derive_fallback_listings(
 # ===========================================================================
 
 
-def _make_checks(sources: list[str], keywords: list[str]):
+def _make_checks(sources: list[str], keywords: list[str], corpus: str = ""):
+    # Agent 1's keywords are usually multi-word phrases ("lumbar support
+    # cushion") while hashtags are shortened forms of them ("#lumbarsupport").
+    # Grounding is therefore checked per word, not against the whole phrase.
+    allowed_words = {
+        word
+        for word in words(corpus) | words(" ".join(keywords)) | words(" ".join(sources))
+        if word not in FORBIDDEN_TAG_WORDS
+    }
     tokens = {
         "".join(c for c in str(k).lower() if c.isalnum())
         for k in keywords
@@ -302,7 +311,9 @@ def _make_checks(sources: list[str], keywords: list[str]):
                 token = "".join(c for c in tag.lower() if c.isalnum())
                 if token in CHANNEL_TAGS[listing.platform]:
                     continue
-                if any(t and t in token for t in tokens):
+                if any(word in token for word in allowed_words):
+                    continue
+                if any(t and token in t for t in tokens):
                     continue
                 problems.append(
                     f"{listing.platform}.hashtags '{tag}' is not an Agent 1 "
@@ -415,8 +426,8 @@ def run_listing_generator_agent(
         schema_model=ListingBundle,
         corpus=corpus,
         temperature=0.6,
-        max_tokens=2200,
-        checks=_make_checks(sources, keywords),
+        max_tokens=3500,
+        checks=_make_checks(sources, keywords, corpus),
     )
 
     if bundle is None:

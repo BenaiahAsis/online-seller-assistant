@@ -92,7 +92,7 @@ export default function AgentLogsConsole({
   };
 
   return (
-    <div className="bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden font-mono transition-all">
+    <div className="bg-slate-950 border border-slate-200 rounded-2xl shadow-sm overflow-hidden font-mono transition-all">
       {/* Console Header Bar */}
       <div className="bg-slate-900/90 border-b border-slate-800 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
@@ -120,6 +120,7 @@ export default function AgentLogsConsole({
           <button
             type="button"
             onClick={() => setAutoScroll(!autoScroll)}
+            aria-pressed={autoScroll}
             className={`px-2 py-1 rounded text-[11px] transition-colors ${
               autoScroll
                 ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
@@ -153,6 +154,7 @@ export default function AgentLogsConsole({
           <button
             type="button"
             onClick={() => setIsMinimized(!isMinimized)}
+            aria-expanded={!isMinimized}
             className="px-2 py-1 rounded text-[11px] text-slate-400 hover:text-white"
           >
             {isMinimized ? 'Expand ▼' : 'Minimize ▲'}
@@ -168,6 +170,7 @@ export default function AgentLogsConsole({
             <button
               type="button"
               onClick={() => setFilter('ALL')}
+              aria-pressed={filter === 'ALL'}
               className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
                 filter === 'ALL'
                   ? 'bg-indigo-600 text-white shadow-sm'
@@ -179,6 +182,7 @@ export default function AgentLogsConsole({
             <button
               type="button"
               onClick={() => setFilter('AGENT1')}
+              aria-pressed={filter === 'AGENT1'}
               className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
                 filter === 'AGENT1'
                   ? 'bg-purple-600 text-white shadow-sm'
@@ -190,6 +194,7 @@ export default function AgentLogsConsole({
             <button
               type="button"
               onClick={() => setFilter('AGENT2')}
+              aria-pressed={filter === 'AGENT2'}
               className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
                 filter === 'AGENT2'
                   ? 'bg-amber-600 text-white shadow-sm'
@@ -201,6 +206,7 @@ export default function AgentLogsConsole({
             <button
               type="button"
               onClick={() => setFilter('AGENT3')}
+              aria-pressed={filter === 'AGENT3'}
               className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
                 filter === 'AGENT3'
                   ? 'bg-emerald-600 text-white shadow-sm'
@@ -214,6 +220,9 @@ export default function AgentLogsConsole({
           {/* Terminal Logs Output Stream */}
           <div
             ref={scrollRef}
+            role="log"
+            aria-live="polite"
+            aria-label="Agent execution logs"
             className="p-4 h-64 overflow-y-auto space-y-2 text-xs leading-relaxed select-text"
           >
             {filteredLogs.length === 0 ? (
