@@ -41,6 +41,121 @@ def make_log(
 
 
 # ---------------------------------------------------------------------------
+# Validation event rendering
+# ---------------------------------------------------------------------------
+
+GATE_LABELS = {
+    "schema": "schema gate",
+    "claims": "claims gate",
+    "grounding": "grounding checks",
+}
+
+
+def render_validation_logs(
+    agent_name: str,
+    events: list[dict[str, Any]] | None,
+    used_fallback: bool,
+) -> list[dict[str, Any]]:
+    """Turn recorded validation events into log entries.
+
+    These describe what the backend actually did to the model's response.
+    Nothing here is inferred from the final result: a retry that succeeded
+    still shows the attempt that was rejected and why.
+    """
+    logs: list[dict[str, Any]] = []
+    events = events or []
+
+    if not events:
+        logs.append(
+            make_log(
+                agent_name,
+                "VALIDATE_NONE",
+                "No validation events recorded for this run",
+                level="WARN",
+            )
+        )
+        return logs
+
+    for event in events:
+        attempt = event.get("attempt", 0)
+        outcome = event.get("outcome")
+
+        if outcome == "skipped":
+            logs.append(
+                make_log(
+                    agent_name,
+                    "VALIDATE_SKIP",
+                    f"Validation gates not exercised ({event.get('reason', 'n/a')}); "
+                    "deterministic fallback used instead",
+                    details={"reason": event.get("reason")},
+                )
+            )
+        elif outcome == "accepted":
+            logs.append(
+                make_log(
+                    agent_name,
+                    "VALIDATE_PASS",
+                    f"Attempt {attempt} accepted: schema, claims and grounding "
+                    "checks all passed",
+                    level="SUCCESS",
+                    details={"attempt": attempt},
+                )
+            )
+        elif outcome == "rejected":
+            violations = event.get("violations") or []
+            gates = ", ".join(GATE_LABELS.get(g, g) for g in (event.get("gates") or []))
+            first = violations[0] if violations else "unspecified violation"
+            extra = f" (+{len(violations) - 1} more)" if len(violations) > 1 else ""
+            logs.append(
+                make_log(
+                    agent_name,
+                    "VALIDATE_REJECT",
+                    f"Attempt {attempt} rejected by {gates or 'validator'}: "
+                    f"{first}{extra}",
+                    level="WARN",
+                    details={"attempt": attempt, "violations": violations},
+                )
+            )
+        elif outcome == "api_error":
+            logs.append(
+                make_log(
+                    agent_name,
+                    "API_ERROR",
+                    f"Attempt {attempt} failed before validation: "
+                    f"{event.get('error', 'unknown error')}",
+                    level="ERROR",
+                    details={"attempt": attempt},
+                )
+            )
+
+    rejected = sum(1 for e in events if e.get("outcome") == "rejected")
+    if rejected and not used_fallback:
+        logs.append(
+            make_log(
+                agent_name,
+                "RETRY_RECOVERED",
+                f"Model output corrected after {rejected} rejected "
+                f"attempt{'s' if rejected > 1 else ''}; validated output stored",
+                level="SUCCESS",
+                details={"rejected_attempts": rejected},
+            )
+        )
+    elif used_fallback and rejected:
+        logs.append(
+            make_log(
+                agent_name,
+                "FALLBACK_USED",
+                f"All {rejected} attempts rejected; deterministic fallback "
+                "substituted so no ungrounded claim is stored",
+                level="WARN",
+                details={"rejected_attempts": rejected},
+            )
+        )
+
+    return logs
+
+
+# ---------------------------------------------------------------------------
 # Agent 1 Log Generator
 # ---------------------------------------------------------------------------
 
@@ -143,7 +258,8 @@ def generate_agent_1_logs(
         make_log(
             agent_name,
             "COMPLETE",
-            f"Structured product profile successfully created & validated for '{name}'",
+            f"Structured product profile created for '{name}' "
+            "(Agent 1 has no backend validation gate)",
             level="SUCCESS",
         )
     )
@@ -228,27 +344,14 @@ def generate_agent_2_logs(
             )
         )
 
-    # Step 6: Anti-Hallucination & Claims Audit
-    fallback_reasons = market_result.get("fallback_reason")
-    if fallback_reasons:
-        logs.append(
-            make_log(
-                agent_name,
-                "AUDIT_RETRY",
-                f"Claim notice ({len(fallback_reasons)} warnings); using fallback",
-                level="WARN",
-                details={"reasons": fallback_reasons},
-            )
+    # Step 6: Validation gates, as actually executed
+    logs.extend(
+        render_validation_logs(
+            agent_name,
+            market_result.get("validation_events"),
+            used_fallback=source != "ai",
         )
-    else:
-        logs.append(
-            make_log(
-                agent_name,
-                "AUDIT_PASS",
-                "Anti-hallucination verification passed: 0 ungrounded claims detected",
-                level="SUCCESS",
-            )
-        )
+    )
 
     # Step 7: Completion
     logs.append(
@@ -310,38 +413,17 @@ def generate_agent_3_logs(
             )
         )
 
-    # Step 3: Guardrail verification
-    has_fallback = any(
-        item.get("source") == "heuristic" or item.get("fallback_reason")
-        for item in listings_result
+    # Step 3: Validation gates, as actually executed
+    has_fallback = any(item.get("source") != "ai" for item in listings_result)
+    events = next(
+        (
+            item.get("validation_events")
+            for item in listings_result
+            if item.get("validation_events")
+        ),
+        None,
     )
-    if has_fallback:
-        logs.append(
-            make_log(
-                agent_name,
-                "ENGINE_NOTICE",
-                "Deterministic fallback template activated (safe quality fallback)",
-                level="INFO",
-                details={"fallback_used": True},
-            )
-        )
-        logs.append(
-            make_log(
-                agent_name,
-                "VALIDATE_NOTICE",
-                "Applied deterministic grounding checks to ensure zero false claims",
-                level="WARN",
-            )
-        )
-    else:
-        logs.append(
-            make_log(
-                agent_name,
-                "VALIDATE_PASS",
-                "Claim audit passed: No unauthorized warranties or guarantees",
-                level="SUCCESS",
-            )
-        )
+    logs.extend(render_validation_logs(agent_name, events, used_fallback=has_fallback))
 
     # Step 4: Completion
     logs.append(
