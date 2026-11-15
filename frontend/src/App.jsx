@@ -656,27 +656,27 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-500/30">
+    <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans selection:bg-indigo-200">
       {/* Top Glassmorphic Navbar */}
-      <header className="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md sticky top-0 z-30 shadow-lg shadow-black/20">
+      <header className="border-b border-slate-200 bg-white/90 backdrop-blur-md sticky top-0 z-30 shadow-sm ">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-amber-500 flex items-center justify-center font-black text-white shadow-lg shadow-indigo-600/30">
+            <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center font-black text-white shadow-sm ">
               ⚡
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-base sm:text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-indigo-300 bg-clip-text text-transparent leading-tight">
+                <span className="font-extrabold text-base sm:text-lg tracking-tight text-slate-900 leading-tight">
                   Online Seller Assistant
                 </span>
-                <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200">
                   v3.0
                 </span>
               </div>
-              <span className="text-[11px] text-slate-400 font-mono flex items-center gap-1.5">
+              <span className="text-[11px] text-slate-500 font-mono flex items-center gap-1.5">
                 <span>Autonomous 3-Agent AI Pipeline</span>
                 <span>&bull;</span>
-                <span className="text-emerald-400">PostgreSQL (Neon)</span>
+                <span className="text-emerald-700">PostgreSQL (Neon)</span>
               </span>
             </div>
           </div>
@@ -688,8 +688,8 @@ export default function App() {
               onClick={() => setActiveTab('assistant')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                 activeTab === 'assistant'
-                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-md shadow-indigo-600/30'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent hover:border-slate-800'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 border border-transparent hover:border-slate-300'
               }`}
             >
               <span>🤖</span>
@@ -700,17 +700,17 @@ export default function App() {
               onClick={() => setActiveTab('devops')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                 activeTab === 'devops'
-                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-md shadow-indigo-600/30'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent hover:border-slate-800'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 border border-transparent hover:border-slate-300'
               }`}
             >
               <span
                 className={`w-2 h-2 rounded-full ${
                   healthLoading
-                    ? 'bg-amber-400 animate-pulse'
+                    ? 'bg-amber-500 animate-pulse'
                     : isHealthy
-                    ? 'bg-emerald-400'
-                    : 'bg-rose-400'
+                    ? 'bg-emerald-500'
+                    : 'bg-rose-500'
                 }`}
               />
               <span>DevOps Health</span>
@@ -726,23 +726,23 @@ export default function App() {
           <div
             role="status"
             aria-live="polite"
-            className="bg-amber-950/80 border border-amber-500/70 text-amber-200 px-4 py-3.5 rounded-2xl flex items-center justify-between shadow-2xl backdrop-blur-md animate-pulse"
+            className="bg-amber-50 border border-amber-400 text-amber-800 px-4 py-3.5 rounded-2xl flex items-center justify-between shadow-sm backdrop-blur-md animate-pulse"
           >
             <div className="flex items-center gap-3">
               <span className="flex h-3.5 w-3.5 relative shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-500 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-amber-500"></span>
               </span>
               <div>
-                <p className="font-semibold text-sm text-amber-100">
+                <p className="font-semibold text-sm text-amber-900">
                   Waking up the server, this can take up to a minute
                 </p>
-                <p className="text-xs text-amber-300/80">
+                <p className="text-xs text-amber-700">
                   The backend service is warming up from idle state. Please wait a moment...
                 </p>
               </div>
             </div>
-            <div className="text-xs px-2.5 py-1 bg-amber-900/60 border border-amber-600/40 rounded-lg text-amber-300 font-mono hidden sm:inline-block">
+            <div className="text-xs px-2.5 py-1 bg-amber-100 border border-amber-300 rounded-lg text-amber-700 font-mono hidden sm:inline-block">
               Free Tier Wake-up
             </div>
           </div>
@@ -751,12 +751,12 @@ export default function App() {
         {/* Global Floating Toast / Notification */}
         {notification && (
           <div
-            className={`p-3.5 rounded-xl border flex items-center justify-between text-xs sm:text-sm font-medium transition-all shadow-xl backdrop-blur-sm ${
+            className={`p-3.5 rounded-xl border flex items-center justify-between text-xs sm:text-sm font-medium transition-all shadow-sm backdrop-blur-sm ${
               notification.type === 'success'
-                ? 'bg-emerald-950/70 border-emerald-600/60 text-emerald-200'
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
                 : notification.type === 'info'
-                ? 'bg-indigo-950/70 border-indigo-600/60 text-indigo-200'
-                : 'bg-rose-950/70 border-rose-600/60 text-rose-200'
+                ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
+                : 'bg-rose-50 border-rose-300 text-rose-800'
             }`}
           >
             <div className="flex items-center gap-2">
@@ -772,7 +772,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setNotification(null)}
-              className="text-xs text-slate-400 hover:text-white ml-3 underline"
+              className="text-xs text-slate-500 hover:text-slate-900 ml-3 underline"
             >
               Dismiss
             </button>
@@ -782,24 +782,24 @@ export default function App() {
         {activeTab === 'assistant' ? (
           <div className="space-y-6">
             {/* Top Overview Banner with Stepper */}
-            <div className="bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-slate-800/80 rounded-3xl p-5 sm:p-6 shadow-2xl relative overflow-hidden">
+            <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm relative overflow-hidden">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
-                  <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-400">
-                    <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+                  <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-600">
+                    <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
                     Sequential Multi-Agent Architecture
                   </div>
-                  <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                  <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
                     Autonomous E-Commerce Listing Studio
                   </h1>
-                  <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
+                  <p className="text-xs sm:text-sm text-slate-700 max-w-2xl leading-relaxed">
                     Transform raw product specs into high-converting, platform-tailored listings with full audit logging and anti-hallucination guardrails.
                   </p>
                 </div>
 
                 {/* Sample Presets */}
                 <div className="space-y-1.5 flex-shrink-0">
-                  <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
+                  <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold block">
                     1-Click Demo Presets:
                   </span>
                   <div className="flex items-center gap-2 flex-wrap">
@@ -808,7 +808,7 @@ export default function App() {
                         key={idx}
                         type="button"
                         onClick={() => handleLoadSample(idx)}
-                        className="inline-flex items-center gap-1.5 text-xs bg-slate-800/90 hover:bg-slate-700/90 text-slate-200 px-3 py-1.5 rounded-xl border border-slate-700 transition-all active:scale-95 shadow-sm"
+                        className="inline-flex items-center gap-1.5 text-xs bg-white hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-xl border border-slate-300 transition-all active:scale-95 shadow-sm"
                       >
                         <span>{s.icon}</span>
                         <span>{s.label}</span>
@@ -819,23 +819,23 @@ export default function App() {
               </div>
 
               {/* Interactive 4-Step Pipeline Stepper */}
-              <div className="mt-6 pt-5 border-t border-slate-800/80">
+              <div className="mt-6 pt-5 border-t border-slate-200">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {/* Step 1 */}
                   <div
                     className={`p-3 rounded-xl border transition-all ${
                       getStepStatus(1) === 'completed'
-                        ? 'bg-indigo-950/40 border-indigo-500/50 text-indigo-200'
-                        : 'bg-slate-950/60 border-slate-800 text-slate-400'
+                        ? 'bg-indigo-50 border-indigo-400 text-indigo-700'
+                        : 'bg-slate-50 border-slate-200 text-slate-500'
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-bold flex items-center justify-center">
+                      <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">
                         1
                       </span>
-                      <span className="text-xs font-bold text-white">Input Details</span>
+                      <span className="text-xs font-bold text-slate-900">Input Details</span>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-1">
+                    <p className="text-[11px] text-slate-500 mt-1">
                       Raw product parameters
                     </p>
                   </div>
@@ -844,19 +844,19 @@ export default function App() {
                   <div
                     className={`p-3 rounded-xl border transition-all ${
                       getStepStatus(2) === 'completed'
-                        ? 'bg-purple-950/40 border-purple-500/50 text-purple-200'
+                        ? 'bg-purple-50 border-purple-400 text-purple-800'
                         : getStepStatus(2) === 'active'
-                        ? 'bg-purple-950/60 border-purple-400 animate-pulse text-purple-100'
-                        : 'bg-slate-950/60 border-slate-800 text-slate-400'
+                        ? 'bg-purple-50 border-purple-400 animate-pulse text-purple-900'
+                        : 'bg-slate-50 border-slate-200 text-slate-500'
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-full bg-purple-500/20 text-purple-300 text-xs font-bold flex items-center justify-center">
+                      <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 text-xs font-bold flex items-center justify-center">
                         2
                       </span>
-                      <span className="text-xs font-bold text-white">Agent 1: Analysis</span>
+                      <span className="text-xs font-bold text-slate-900">Agent 1: Analysis</span>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-1">
+                    <p className="text-[11px] text-slate-500 mt-1">
                       Category, specs &amp; SEO tags
                     </p>
                   </div>
@@ -865,19 +865,19 @@ export default function App() {
                   <div
                     className={`p-3 rounded-xl border transition-all ${
                       getStepStatus(3) === 'completed'
-                        ? 'bg-amber-950/40 border-amber-500/50 text-amber-200'
+                        ? 'bg-amber-50 border-amber-400 text-amber-800'
                         : getStepStatus(3) === 'active'
-                        ? 'bg-amber-950/60 border-amber-400 animate-pulse text-amber-100'
-                        : 'bg-slate-950/60 border-slate-800 text-slate-400'
+                        ? 'bg-amber-100 border-amber-400 animate-pulse text-amber-900'
+                        : 'bg-slate-50 border-slate-200 text-slate-500'
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold flex items-center justify-center">
+                      <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-700 text-xs font-bold flex items-center justify-center">
                         3
                       </span>
-                      <span className="text-xs font-bold text-white">Agent 2: Strategy</span>
+                      <span className="text-xs font-bold text-slate-900">Agent 2: Strategy</span>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-1">
+                    <p className="text-[11px] text-slate-500 mt-1">
                       Pricing tier &amp; hesitations
                     </p>
                   </div>
@@ -886,19 +886,19 @@ export default function App() {
                   <div
                     className={`p-3 rounded-xl border transition-all ${
                       getStepStatus(4) === 'completed'
-                        ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-200'
+                        ? 'bg-emerald-50 border-emerald-400 text-emerald-800'
                         : getStepStatus(4) === 'active'
-                        ? 'bg-emerald-950/60 border-emerald-400 animate-pulse text-emerald-100'
-                        : 'bg-slate-950/60 border-slate-800 text-slate-400'
+                        ? 'bg-emerald-50 border-emerald-400 animate-pulse text-emerald-900'
+                        : 'bg-slate-50 border-slate-200 text-slate-500'
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold flex items-center justify-center">
+                      <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold flex items-center justify-center">
                         4
                       </span>
-                      <span className="text-xs font-bold text-white">Agent 3: Listings</span>
+                      <span className="text-xs font-bold text-slate-900">Agent 3: Listings</span>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-1">
+                    <p className="text-[11px] text-slate-500 mt-1">
                       Shopee, TikTok, Lazada
                     </p>
                   </div>
@@ -911,13 +911,13 @@ export default function App() {
               {/* Left Column (5 cols): Input Form + Live Agent Terminal */}
               <div className="lg:col-span-5 space-y-6">
                 {/* Input Form Card */}
-                <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
-                  <div className="border-b border-slate-800 pb-3">
-                    <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-sm space-y-4">
+                  <div className="border-b border-slate-200 pb-3">
+                    <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
                       <span>📝</span>
                       <span>Raw Product Input Form</span>
                     </h2>
-                    <p className="text-xs text-slate-400 mt-0.5">
+                    <p className="text-xs text-slate-500 mt-0.5">
                       Enter unorganized product notes or select a demo preset above.
                     </p>
                   </div>
@@ -927,9 +927,9 @@ export default function App() {
                     <div className="space-y-1">
                       <label
                         htmlFor="product-name"
-                        className="text-xs font-semibold text-slate-300 block"
+                        className="text-xs font-semibold text-slate-700 block"
                       >
-                        Product Title / Name <span className="text-rose-400">*</span>
+                        Product Title / Name <span className="text-rose-700">*</span>
                       </label>
                       <input
                         id="product-name"
@@ -940,7 +940,7 @@ export default function App() {
                         onChange={(e) =>
                           setFormData({ ...formData, name: e.target.value })
                         }
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                       />
                     </div>
 
@@ -949,9 +949,9 @@ export default function App() {
                       <div className="space-y-1">
                         <label
                           htmlFor="product-price"
-                          className="text-xs font-semibold text-slate-300 block"
+                          className="text-xs font-semibold text-slate-700 block"
                         >
-                          Price (₱) <span className="text-rose-400">*</span>
+                          Price (₱) <span className="text-rose-700">*</span>
                         </label>
                         <input
                           id="product-price"
@@ -964,13 +964,13 @@ export default function App() {
                           onChange={(e) =>
                             setFormData({ ...formData, price: e.target.value })
                           }
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors font-mono"
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors font-mono"
                         />
                       </div>
                       <div className="space-y-1">
                         <label
                           htmlFor="product-quantity"
-                          className="text-xs font-semibold text-slate-300 block"
+                          className="text-xs font-semibold text-slate-700 block"
                         >
                           Stock Units
                         </label>
@@ -983,14 +983,14 @@ export default function App() {
                           onChange={(e) =>
                             setFormData({ ...formData, quantity: e.target.value })
                           }
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors font-mono"
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors font-mono"
                         />
                       </div>
                     </div>
 
                     {/* Price Sanity Warning */}
                     {priceSanityWarning && (
-                      <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-2 shadow-sm">
+                      <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-xs flex items-start gap-2 shadow-sm">
                         <span className="text-sm flex-shrink-0">⚠️</span>
                         <span className="leading-relaxed">{priceSanityWarning}</span>
                       </div>
@@ -1000,7 +1000,7 @@ export default function App() {
                     <div className="space-y-1">
                       <label
                         htmlFor="product-materials"
-                        className="text-xs font-semibold text-slate-300 block"
+                        className="text-xs font-semibold text-slate-700 block"
                       >
                         Materials / Composition
                       </label>
@@ -1012,7 +1012,7 @@ export default function App() {
                         onChange={(e) =>
                           setFormData({ ...formData, materials: e.target.value })
                         }
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                       />
                     </div>
 
@@ -1020,7 +1020,7 @@ export default function App() {
                     <div className="space-y-1">
                       <label
                         htmlFor="product-features"
-                        className="text-xs font-semibold text-slate-300 block"
+                        className="text-xs font-semibold text-slate-700 block"
                       >
                         Raw Features &amp; Unorganized Notes
                       </label>
@@ -1032,7 +1032,7 @@ export default function App() {
                         onChange={(e) =>
                           setFormData({ ...formData, features: e.target.value })
                         }
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                       />
                     </div>
 
@@ -1046,7 +1046,7 @@ export default function App() {
                           analyzingId !== null ||
                           runningPipelineId !== null
                         }
-                        className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold text-xs sm:text-sm transition-all bg-gradient-to-r from-amber-500 via-indigo-600 to-indigo-700 hover:from-amber-400 hover:to-indigo-600 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-lg shadow-indigo-600/30"
+                        className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold text-xs sm:text-sm transition-all bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-sm "
                       >
                         {submitting || runningPipelineId !== null ? (
                           <>
@@ -1085,7 +1085,7 @@ export default function App() {
                           analyzingId !== null ||
                           runningPipelineId !== null
                         }
-                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-xs transition-all bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 disabled:opacity-50"
+                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-xs transition-all bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 border border-slate-300 disabled:opacity-50"
                       >
                         {analyzingId !== null ? (
                           <span>Analyzing with Agent 1...</span>
@@ -1109,11 +1109,11 @@ export default function App() {
               {/* Right Column (7 cols): Agent 1, Agent 2 & Agent 3 Cards */}
               <div className="lg:col-span-7 space-y-6">
                 {/* Agent 1 Card: Structured Product Profile */}
-                <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-5">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-sm space-y-5">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                     <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.8)]"></span>
-                      <h2 className="text-lg font-bold text-white">
+                      <span className="w-2.5 h-2.5 rounded-full bg-purple-500 "></span>
+                      <h2 className="text-lg font-bold text-slate-900">
                         Agent 1: Structured Profile
                       </h2>
                     </div>
@@ -1121,10 +1121,10 @@ export default function App() {
                       <span
                         className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
                           selectedProduct.status === 'completed'
-                            ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30'
+                            ? 'bg-cyan-50 text-cyan-700 border border-cyan-200'
                             : selectedProduct.status === 'analyzed'
-                            ? 'bg-purple-500/10 text-purple-400 border border-purple-500/30'
-                            : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                            ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                            : 'bg-amber-50 text-amber-700 border border-amber-200'
                         }`}
                       >
                         {selectedProduct.status === 'completed'
@@ -1139,25 +1139,25 @@ export default function App() {
                   {selectedProduct ? (
                     <div className="space-y-4">
                       {/* Product Header */}
-                      <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div>
-                          <span className="text-xs text-slate-400 font-mono">
+                          <span className="text-xs text-slate-500 font-mono">
                             ID #{selectedProduct.id}
                           </span>
-                          <h3 className="text-base sm:text-lg font-bold text-white">
+                          <h3 className="text-base sm:text-lg font-bold text-slate-900">
                             {selectedProduct.name}
                           </h3>
-                          <div className="flex items-center gap-3 text-xs text-slate-400 mt-1">
+                          <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
                             <span>
                               Price:{' '}
-                              <strong className="text-emerald-400 font-mono">
+                              <strong className="text-emerald-700 font-mono">
                                 ₱{Number(selectedProduct.price).toFixed(2)}
                               </strong>
                             </span>
                             <span>&bull;</span>
                             <span>
                               Stock:{' '}
-                              <strong className="text-slate-200 font-mono">
+                              <strong className="text-slate-800 font-mono">
                                 {selectedProduct.quantity} units
                               </strong>
                             </span>
@@ -1169,7 +1169,7 @@ export default function App() {
                             type="button"
                             onClick={() => handleRunFullPipeline(selectedProduct.id)}
                             disabled={runningPipelineId === selectedProduct.id}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-400 hover:to-indigo-500 text-white shadow transition-all disabled:opacity-50"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow transition-all disabled:opacity-50"
                           >
                             {runningPipelineId === selectedProduct.id
                               ? 'Running Pipeline...'
@@ -1180,7 +1180,7 @@ export default function App() {
                             type="button"
                             onClick={() => handleRunAnalysis(selectedProduct.id)}
                             disabled={analyzingId === selectedProduct.id}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white shadow transition-all disabled:opacity-50"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white shadow transition-all disabled:opacity-50"
                           >
                             {analyzingId === selectedProduct.id
                               ? 'Analyzing...'
@@ -1199,7 +1199,7 @@ export default function App() {
                                 {selectedProduct.analysis.market_insights.unverified_claims.map((claim, idx) => (
                                   <div
                                     key={idx}
-                                    className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-sm"
+                                    className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-sm"
                                   >
                                     <div className="flex items-center gap-2">
                                       <span className="text-sm flex-shrink-0">⚠️</span>
@@ -1207,7 +1207,7 @@ export default function App() {
                                         <strong>Unverified Claim:</strong> &ldquo;{claim.claim}&rdquo; &rarr; softened to &ldquo;<em>{claim.softened}</em>&rdquo;
                                       </span>
                                     </div>
-                                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 self-start sm:self-center flex-shrink-0">
+                                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-100 text-amber-700 self-start sm:self-center flex-shrink-0">
                                       Claim Softened
                                     </span>
                                   </div>
@@ -1218,12 +1218,12 @@ export default function App() {
                           {/* Thin Input Suggested Questions */}
                           {selectedProduct.analysis.market_insights?.suggested_questions &&
                             selectedProduct.analysis.market_insights.suggested_questions.length > 0 && (
-                              <div className="bg-indigo-950/40 border border-indigo-500/30 rounded-xl p-3.5 text-xs text-indigo-200 space-y-2 shadow-sm">
-                                <div className="flex items-center gap-1.5 font-bold text-indigo-300">
+                              <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3.5 text-xs text-indigo-700 space-y-2 shadow-sm">
+                                <div className="flex items-center gap-1.5 font-bold text-indigo-700">
                                   <span>💡</span>
                                   <span>Thin Input Detected &bull; Suggested Seller Follow-up Questions:</span>
                                 </div>
-                                <ul className="list-disc list-inside space-y-1 text-slate-300 pl-1">
+                                <ul className="list-disc list-inside space-y-1 text-slate-700 pl-1">
                                   {selectedProduct.analysis.market_insights.suggested_questions.map((q, idx) => (
                                     <li key={idx}>{q}</li>
                                   ))}
@@ -1233,7 +1233,7 @@ export default function App() {
 
                           {/* Product Price Notice */}
                           {selectedProduct.analysis.market_insights?.price_warning && (
-                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-200 flex items-center gap-2">
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 flex items-center gap-2">
                               <span className="text-sm flex-shrink-0">⚠️</span>
                               <span>{selectedProduct.analysis.market_insights.price_warning}</span>
                             </div>
@@ -1241,21 +1241,21 @@ export default function App() {
 
                           {/* Category & Audience */}
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-1">
-                              <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1">
+                              <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold block">
                                 Inferred Category
                               </span>
-                              <span className="inline-block text-sm font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2.5 py-1 rounded-lg">
+                              <span className="inline-block text-sm font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-lg">
                                 {selectedProduct.analysis.category ||
                                   'General Merchandise'}
                               </span>
                             </div>
 
-                            <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-1">
-                              <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1">
+                              <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold block">
                                 Target Demographic
                               </span>
-                              <span className="text-sm text-slate-200">
+                              <span className="text-sm text-slate-800">
                                 {selectedProduct.analysis.target_audience ||
                                   'Value-conscious shoppers'}
                               </span>
@@ -1265,11 +1265,11 @@ export default function App() {
                           {/* Key Selling Points */}
                           {selectedProduct.analysis.selling_points &&
                             selectedProduct.analysis.selling_points.length > 0 && (
-                              <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-2">
-                                <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
+                              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+                                <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold block">
                                   Key Value Propositions
                                 </span>
-                                <ul className="space-y-1.5 text-xs sm:text-sm text-slate-300">
+                                <ul className="space-y-1.5 text-xs sm:text-sm text-slate-700">
                                   {selectedProduct.analysis.selling_points.map(
                                     (point, idx) => (
                                       <li
@@ -1277,7 +1277,7 @@ export default function App() {
                                         className="flex items-start gap-2"
                                       >
                                         <svg
-                                          className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5"
+                                          className="w-4 h-4 text-emerald-700 flex-shrink-0 mt-0.5"
                                           fill="none"
                                           stroke="currentColor"
                                           viewBox="0 0 24 24"
@@ -1301,13 +1301,13 @@ export default function App() {
                           {selectedProduct.analysis.suggested_keywords &&
                             selectedProduct.analysis.suggested_keywords.length >
                               0 && (
-                              <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-2">
+                              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
                                 <div className="flex items-center justify-between">
-                                  <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+                                  <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">
                                     High-Intent SEO Keywords (Click to copy)
                                   </span>
                                   {copiedKeyword && (
-                                    <span className="text-[11px] text-emerald-400 font-medium animate-pulse">
+                                    <span className="text-[11px] text-emerald-700 font-medium animate-pulse">
                                       Copied &ldquo;{copiedKeyword}&rdquo;!
                                     </span>
                                   )}
@@ -1319,7 +1319,7 @@ export default function App() {
                                         key={idx}
                                         type="button"
                                         onClick={() => handleCopyKeyword(kw)}
-                                        className="text-xs bg-slate-900 hover:bg-slate-800 text-indigo-300 hover:text-white border border-slate-800 hover:border-indigo-500/50 px-2.5 py-1 rounded-md transition-colors font-mono"
+                                        className="text-xs bg-white hover:bg-slate-100 text-indigo-700 hover:text-slate-900 border border-slate-200 hover:border-indigo-400 px-2.5 py-1 rounded-md transition-colors font-mono"
                                       >
                                         #{kw}
                                       </button>
@@ -1331,26 +1331,26 @@ export default function App() {
 
                           {/* Raw Summary */}
                           {selectedProduct.analysis.raw_summary && (
-                            <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-1">
-                              <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block">
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1">
+                              <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold block">
                                 Profiling Summary
                               </span>
-                              <p className="text-xs text-slate-300 leading-relaxed font-mono">
+                              <p className="text-xs text-slate-700 leading-relaxed font-mono">
                                 {selectedProduct.analysis.raw_summary}
                               </p>
                             </div>
                           )}
                         </div>
                       ) : (
-                        <div className="text-center py-8 space-y-3 bg-slate-950/40 rounded-xl border border-slate-800 border-dashed">
-                          <p className="text-sm text-slate-400">
+                        <div className="text-center py-8 space-y-3 bg-slate-50 rounded-xl border border-slate-200 border-dashed">
+                          <p className="text-sm text-slate-500">
                             This product has not been analyzed yet.
                           </p>
                           <button
                             type="button"
                             onClick={() => handleRunAnalysis(selectedProduct.id)}
                             disabled={analyzingId === selectedProduct.id}
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow"
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow"
                           >
                             Run Agent 1 Analysis Now
                           </button>
@@ -1391,13 +1391,13 @@ export default function App() {
             </div>
 
             {/* Bottom Saved Products Catalog */}
-            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
                 <div>
-                  <h3 className="text-base font-bold text-white">
+                  <h3 className="text-base font-bold text-slate-900">
                     Saved Product Catalog
                   </h3>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-500">
                     Live records in Neon PostgreSQL ({products.length} products stored)
                   </p>
                 </div>
@@ -1408,13 +1408,13 @@ export default function App() {
                     placeholder="Search catalog..."
                     value={catalogSearch}
                     onChange={(e) => setCatalogSearch(e.target.value)}
-                    className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 w-44 sm:w-60"
+                    className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 w-44 sm:w-60"
                   />
                   <button
                     type="button"
                     onClick={fetchProducts}
                     disabled={productsLoading}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 transition-colors disabled:opacity-50"
                   >
                     <svg
                       className={`w-3.5 h-3.5 ${
@@ -1453,21 +1453,21 @@ export default function App() {
                         onClick={() => setSelectedProduct(p)}
                         className={`cursor-pointer rounded-xl p-4 border transition-all text-left space-y-2 ${
                           isSelected
-                            ? 'bg-indigo-950/40 border-indigo-500/80 shadow-md shadow-indigo-500/10 ring-1 ring-indigo-500/50'
-                            : 'bg-slate-950/70 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/60'
+                            ? 'bg-indigo-50 border-indigo-500 shadow-sm ring-1 ring-indigo-500'
+                            : 'bg-slate-50 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <h4 className="font-bold text-sm text-white line-clamp-1">
+                          <h4 className="font-bold text-sm text-slate-900 line-clamp-1">
                             {p.name}
                           </h4>
                           <span
                             className={`text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
                               p.status === 'completed' || hasListings
-                                ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30'
+                                ? 'bg-cyan-50 text-cyan-700 border border-cyan-200'
                                 : p.status === 'analyzed'
-                                ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
-                                : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200'
                             }`}
                           >
                             {p.status === 'completed' || hasListings
@@ -1477,11 +1477,11 @@ export default function App() {
                               : 'Draft'}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between text-xs text-slate-400">
-                          <span className="font-mono text-emerald-400 font-semibold">
+                        <div className="flex items-center justify-between text-xs text-slate-500">
+                          <span className="font-mono text-emerald-700 font-semibold">
                             ₱{Number(p.price).toFixed(2)}
                           </span>
-                          <span className="font-mono text-slate-400">
+                          <span className="font-mono text-slate-500">
                             Qty: {p.quantity}
                           </span>
                           <span className="text-slate-500 text-[11px] truncate max-w-[120px]">
@@ -1501,30 +1501,30 @@ export default function App() {
           /* ========================================================================= */
           <div className="max-w-3xl mx-auto space-y-6">
             <header className="text-center space-y-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-600 border border-indigo-200">
+                <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
                 DevOps &amp; Infrastructure
               </div>
-              <h2 className="text-3xl font-extrabold tracking-tight text-white">
+              <h2 className="text-3xl font-extrabold tracking-tight text-slate-900">
                 Live System Health Monitor
               </h2>
-              <p className="text-sm text-slate-400">
+              <p className="text-sm text-slate-500">
                 React Vite frontend monitoring FastAPI backend &amp; Neon PostgreSQL health
               </p>
             </header>
 
             {/* Configuration Card */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 sm:p-5 shadow-lg backdrop-blur">
+            <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm backdrop-blur">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs sm:text-sm">
                 <div>
-                  <span className="text-slate-400 font-medium">Target Health URL:</span>{' '}
-                  <code className="text-indigo-300 bg-slate-950 px-2 py-1 rounded border border-slate-800 break-all font-mono">
+                  <span className="text-slate-500 font-medium">Target Health URL:</span>{' '}
+                  <code className="text-indigo-700 bg-white px-2 py-1 rounded border border-slate-200 break-all font-mono">
                     {healthEndpoint}
                   </code>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-400">Last checked:</span>
-                  <span className="font-mono text-slate-200">
+                  <span className="text-slate-500">Last checked:</span>
+                  <span className="font-mono text-slate-800">
                     {lastChecked || 'Not checked yet'}
                   </span>
                 </div>
@@ -1534,42 +1534,42 @@ export default function App() {
             {/* Status Metrics Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {/* HTTP Status */}
-              <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-1">
-                <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block">
+              <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-1">
+                <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold block">
                   API Status
                 </span>
                 <div className="flex items-center gap-2">
                   <span
                     className={`w-3 h-3 rounded-full ${
                       healthLoading
-                        ? 'bg-amber-400 animate-pulse'
+                        ? 'bg-amber-500 animate-pulse'
                         : isHealthy
-                        ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)]'
-                        : 'bg-rose-400 shadow-[0_0_10px_rgba(251,113,133,0.8)]'
+                        ? 'bg-emerald-500 '
+                        : 'bg-rose-500 '
                     }`}
                   />
-                  <span className="text-base font-semibold text-white">
+                  <span className="text-base font-semibold text-slate-900">
                     {healthLoading ? (isServerWakingUp ? 'Waking up server...' : 'Probing...') : isHealthy ? 'Healthy' : 'Degraded'}
                   </span>
                 </div>
               </div>
 
               {/* Database Connection */}
-              <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-1">
-                <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block">
+              <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-1">
+                <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold block">
                   Neon PostgreSQL
                 </span>
                 <div className="flex items-center gap-2">
                   <span
                     className={`w-3 h-3 rounded-full ${
                       healthLoading
-                        ? 'bg-amber-400 animate-pulse'
+                        ? 'bg-amber-500 animate-pulse'
                         : healthData?.database === 'connected'
-                        ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)]'
-                        : 'bg-rose-400 shadow-[0_0_10px_rgba(251,113,133,0.8)]'
+                        ? 'bg-emerald-500 '
+                        : 'bg-rose-500 '
                     }`}
                   />
-                  <span className="text-base font-semibold text-white">
+                  <span className="text-base font-semibold text-slate-900">
                     {healthLoading
                       ? 'Verifying...'
                       : healthData?.database === 'connected'
@@ -1580,12 +1580,12 @@ export default function App() {
               </div>
 
               {/* Refresh Action */}
-              <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col justify-center">
+              <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col justify-center">
                 <button
                   type="button"
                   onClick={fetchHealth}
                   disabled={healthLoading}
-                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-md shadow-indigo-600/20"
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-sm "
                 >
                   {healthLoading ? (
                     <>
@@ -1634,8 +1634,8 @@ export default function App() {
 
             {/* Error Alert Box */}
             {healthError && (
-              <div className="bg-rose-950/40 border border-rose-800/60 rounded-xl p-4 text-rose-200 text-sm space-y-1">
-                <div className="flex items-center gap-2 font-semibold text-rose-300">
+              <div className="bg-rose-50 border border-rose-300 rounded-xl p-4 text-rose-800 text-sm space-y-1">
+                <div className="flex items-center gap-2 font-semibold text-rose-700">
                   <svg
                     className="w-5 h-5 flex-shrink-0"
                     fill="none"
@@ -1651,31 +1651,31 @@ export default function App() {
                   </svg>
                   <span>Connection Warning</span>
                 </div>
-                <p className="font-mono text-xs text-rose-300/90 break-words pl-7">
+                <p className="font-mono text-xs text-rose-700 break-words pl-7">
                   {healthError}
                 </p>
               </div>
             )}
 
             {/* Detailed Response Payload */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 sm:p-5 space-y-3">
+            <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
                   Raw Health Payload
                 </span>
                 {statusCode && (
                   <span
                     className={`text-xs px-2 py-0.5 rounded font-mono font-medium ${
                       statusCode === 200
-                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                        : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-rose-50 text-rose-700 border border-rose-200'
                     }`}
                   >
                     HTTP {statusCode}
                   </span>
                 )}
               </div>
-              <pre className="bg-slate-950 rounded-lg p-4 font-mono text-xs sm:text-sm text-slate-300 overflow-x-auto border border-slate-800/80">
+              <pre className="bg-white rounded-lg p-4 font-mono text-xs sm:text-sm text-slate-700 overflow-x-auto border border-slate-200">
                 {healthData
                   ? JSON.stringify(healthData, null, 2)
                   : healthError
@@ -1692,11 +1692,11 @@ export default function App() {
       </main>
 
       {/* Global Footer */}
-      <footer className="border-t border-slate-800/80 bg-slate-950/60 py-4 px-4 text-center text-xs text-slate-500 space-y-1">
+      <footer className="border-t border-slate-200 bg-slate-50 py-4 px-4 text-center text-xs text-slate-500 space-y-1">
         <p>
           Online Seller Assistant &bull; Autonomous Multi-Agent AI System &bull; Sprint 3
         </p>
-        <p className="text-[11px] text-slate-600 font-mono">
+        <p className="text-[11px] text-slate-500 font-mono">
           FastAPI &bull; Neon PostgreSQL &bull; React Vite &bull; Tailwind CSS &bull; Render &bull; Vercel
         </p>
       </footer>
