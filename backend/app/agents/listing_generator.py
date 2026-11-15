@@ -12,7 +12,9 @@ from app.agents.validation import (
     PLACEHOLDER_KEYS,
     build_corpus,
     call_agent,
+    events_to_reasons,
     grounded,
+    skipped_event,
 )
 from app.config import settings
 
@@ -215,9 +217,7 @@ def _derive_fallback_listings(
         f"{highlights_block}\n\n"
         f"Price: {CURRENCY}{price:,.2f} | Fast shipping & ready stock!"
     )
-    tiktok_cta = (
-        "Tap the yellow basket below to order yours before stocks run out!"
-    )
+    tiktok_cta = "Tap the yellow basket below to order yours before stocks run out!"
 
     lazada_desc = (
         f"Experience dependable daily performance and sleek craftsmanship "
@@ -360,6 +360,9 @@ def run_listing_generator_agent(
 
     client = client or _client()
     if client is None:
+        skipped = skipped_event("no OPENAI_API_KEY configured")
+        for listing in fallback:
+            listing["validation_events"] = skipped
         return fallback
 
     ranked = [
@@ -404,7 +407,7 @@ def run_listing_generator_agent(
         "   - Never invent warranties, certifications, or medical claims.\n"
     )
 
-    bundle, errors = call_agent(
+    bundle, events = call_agent(
         client=client,
         model=MODEL,
         system=SYSTEM,
@@ -417,13 +420,16 @@ def run_listing_generator_agent(
     )
 
     if bundle is None:
+        reasons = events_to_reasons(events)
         for listing in fallback:
-            listing["fallback_reason"] = errors
+            listing["fallback_reason"] = reasons
+            listing["validation_events"] = events
         return fallback
 
     results = []
     for listing in bundle.listings:
         payload = listing.model_dump()
         payload["source"] = "ai"
+        payload["validation_events"] = events
         results.append(payload)
     return results

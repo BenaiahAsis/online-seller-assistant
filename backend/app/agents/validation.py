@@ -218,13 +218,13 @@ def call_agent(
     temperature: float,
     max_tokens: int,
     checks: Callable[[ModelT], list[str]] | None = None,
-) -> tuple[ModelT | None, list[str]]:
+) -> tuple[ModelT | None, list[dict[str, Any]]]:
     messages = [
         {"role": "system", "content": system},
         {"role": "user", "content": prompt},
     ]
     schema = strict_schema(schema_model)
-    errors: list[str] = []
+    events: list[dict[str, Any]] = []
 
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
@@ -244,8 +244,14 @@ def call_agent(
             )
             raw = response.choices[0].message.content or "{}"
         except Exception as exc:
-            errors.append(f"attempt {attempt}: API error: {exc}")
-            return None, errors
+            events.append(
+                {
+                    "attempt": attempt,
+                    "outcome": "api_error",
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
+            return None, events
 
         try:
             result = schema_model.model_validate_json(raw)
@@ -254,16 +260,48 @@ def call_agent(
                 f"{'.'.join(str(p) for p in e['loc']) or 'root'}: {e['msg']}"
                 for e in exc.errors()[:6]
             ]
+            gates = ["schema"]
         else:
-            violations = scan_claims(result.model_dump(), corpus)
-            if checks:
-                violations += checks(result)
+            claim_hits = scan_claims(result.model_dump(), corpus)
+            check_hits = checks(result) if checks else []
+            violations = claim_hits + check_hits
             if not violations:
-                return result, errors
+                events.append({"attempt": attempt, "outcome": "accepted"})
+                return result, events
+            gates = []
+            if claim_hits:
+                gates.append("claims")
+            if check_hits:
+                gates.append("grounding")
 
-        errors.append(f"attempt {attempt}: {'; '.join(violations)}")
+        events.append(
+            {
+                "attempt": attempt,
+                "outcome": "rejected",
+                "gates": gates,
+                "violations": violations,
+            }
+        )
         if attempt < MAX_ATTEMPTS:
             messages.append({"role": "assistant", "content": raw})
             messages.append({"role": "user", "content": retry_message(violations)})
 
-    return None, errors
+    return None, events
+
+
+def events_to_reasons(events: list[dict[str, Any]]) -> list[str]:
+    """Flatten validation events into the plain strings older callers expect."""
+    reasons = []
+    for event in events:
+        attempt = event.get("attempt", "?")
+        if event.get("outcome") == "api_error":
+            reasons.append(f"attempt {attempt}: API error: {event.get('error', '')}")
+        elif event.get("outcome") == "rejected":
+            joined = "; ".join(event.get("violations") or [])
+            reasons.append(f"attempt {attempt}: {joined}")
+    return reasons
+
+
+def skipped_event(reason: str) -> list[dict[str, Any]]:
+    """A single event recording that the gates were never exercised."""
+    return [{"attempt": 0, "outcome": "skipped", "reason": reason}]

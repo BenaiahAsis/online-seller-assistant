@@ -11,6 +11,10 @@ from app.agents.listing_generator import (
     _derive_fallback_listings,
     run_listing_generator_agent,
 )
+from app.agents.logger import (
+    generate_agent_2_logs,
+    generate_agent_3_logs,
+)
 from app.agents.market_analyzer import (
     _derive_fallback_market_insights,
     price_tier,
@@ -644,3 +648,84 @@ def test_fake_claim_fda_approved_blocked():
     corpus = "smartwatch aluminum glass free strap"
     violations = scan_claims({"bullet": "FDA approved medical device"}, corpus)
     assert any("certification claim" in v for v in violations)
+
+
+# --------------------------------------------------------------------------
+# Execution logs reflect what validation actually did
+# --------------------------------------------------------------------------
+
+
+def _stages(logs):
+    return [entry["stage"] for entry in logs]
+
+
+def test_recovered_retry_is_recorded_not_hidden():
+    fake = FakeClient(fabricated_market_payload(), valid_market_payload())
+    result = run_market_analyzer_agent(PRODUCT, PROFILE, client=fake)
+
+    events = result["validation_events"]
+    assert [e["outcome"] for e in events] == ["rejected", "accepted"]
+    assert "claims" in events[0]["gates"]
+
+    logs = generate_agent_2_logs(PRODUCT, PROFILE, result)
+    stages = _stages(logs)
+    assert "VALIDATE_REJECT" in stages
+    assert "VALIDATE_PASS" in stages
+    assert "RETRY_RECOVERED" in stages
+
+    # The rejected attempt must never be reported as a clean run.
+    text = " ".join(entry["message"] for entry in logs)
+    assert "0 ungrounded claims" not in text
+
+
+def test_first_attempt_success_records_no_rejection():
+    fake = FakeClient(valid_market_payload())
+    result = run_market_analyzer_agent(PRODUCT, PROFILE, client=fake)
+
+    assert [e["outcome"] for e in result["validation_events"]] == ["accepted"]
+    stages = _stages(generate_agent_2_logs(PRODUCT, PROFILE, result))
+    assert "VALIDATE_PASS" in stages
+    assert "VALIDATE_REJECT" not in stages
+    assert "RETRY_RECOVERED" not in stages
+
+
+def test_exhausted_retries_are_logged_as_fallback():
+    fake = FakeClient("{}", "{}")
+    result = run_market_analyzer_agent(PRODUCT, PROFILE, client=fake)
+
+    assert result["source"] == "heuristic"
+    assert all(e["outcome"] == "rejected" for e in result["validation_events"])
+
+    stages = _stages(generate_agent_2_logs(PRODUCT, PROFILE, result))
+    assert stages.count("VALIDATE_REJECT") == 2
+    assert "FALLBACK_USED" in stages
+
+
+def test_api_error_is_logged_as_error():
+    fake = FakeClient(RuntimeError("rate limited"))
+    result = run_market_analyzer_agent(PRODUCT, PROFILE, client=fake)
+
+    logs = generate_agent_2_logs(PRODUCT, PROFILE, result)
+    error_logs = [e for e in logs if e["stage"] == "API_ERROR"]
+    assert error_logs and error_logs[0]["level"] == "ERROR"
+    assert "rate limited" in error_logs[0]["message"]
+
+
+def test_missing_key_is_logged_as_skipped_not_passed():
+    result = run_market_analyzer_agent(PRODUCT, PROFILE)
+
+    assert result["source"] == "heuristic"
+    stages = _stages(generate_agent_2_logs(PRODUCT, PROFILE, result))
+    assert "VALIDATE_SKIP" in stages
+    assert "VALIDATE_PASS" not in stages
+
+
+def test_listing_agent_logs_its_own_validation():
+    fake = FakeClient(fabricated_listing_payload(), valid_listing_payload())
+    listings = run_listing_generator_agent(
+        PRODUCT, PROFILE, MARKET_CONTEXT, client=fake
+    )
+
+    stages = _stages(generate_agent_3_logs(PRODUCT, listings))
+    assert "VALIDATE_REJECT" in stages
+    assert "RETRY_RECOVERED" in stages

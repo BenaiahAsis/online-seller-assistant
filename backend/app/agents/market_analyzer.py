@@ -11,7 +11,9 @@ from app.agents.validation import (
     PLACEHOLDER_KEYS,
     build_corpus,
     call_agent,
+    events_to_reasons,
     grounded,
+    skipped_event,
 )
 from app.config import settings
 
@@ -255,6 +257,7 @@ def run_market_analyzer_agent(
     client = client or _client()
     if client is None:
         fallback["fallback_reason"] = ["no OPENAI_API_KEY configured"]
+        fallback["validation_events"] = skipped_event("no OPENAI_API_KEY configured")
         return fallback
 
     tier = price_tier(price)
@@ -290,7 +293,7 @@ def run_market_analyzer_agent(
         "contents, product condition, shipping or other products."
     )
 
-    analysis, errors = call_agent(
+    analysis, events = call_agent(
         client=client,
         model=MODEL,
         system=SYSTEM,
@@ -303,9 +306,11 @@ def run_market_analyzer_agent(
     )
 
     if analysis is None:
-        fallback["fallback_reason"] = errors
+        fallback["fallback_reason"] = events_to_reasons(events)
+        fallback["validation_events"] = events
         return fallback
 
     payload = analysis.model_dump()
     payload["source"] = "ai"
+    payload["validation_events"] = events
     return payload
