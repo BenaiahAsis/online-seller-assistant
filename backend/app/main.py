@@ -225,6 +225,23 @@ def get_product(product_id: int, db: Annotated[Session, Depends(get_db)]):
     return product
 
 
+@app.delete(
+    "/api/products/{product_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["Products"],
+)
+def delete_product(product_id: int, db: Annotated[Session, Depends(get_db)]):
+    """Permanently delete a product and all its analyses and listings."""
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Product with ID {product_id} not found.",
+        )
+    db.delete(product)
+    db.commit()
+
+
 @app.post(
     "/api/products/{product_id}/analyze",
     response_model=ProductResponse,

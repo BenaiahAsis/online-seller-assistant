@@ -171,6 +171,25 @@ export default function App() {
     }
   }, [productsEndpoint]);
 
+  const handleDeleteProduct = useCallback(
+    async (productId) => {
+      if (!window.confirm('Delete this product and all its listings? This cannot be undone.')) return;
+      try {
+        const res = await fetch(`${productsEndpoint}/${productId}`, { method: 'DELETE' });
+        if (!res.ok && res.status !== 204) {
+          const err = await res.json().catch(() => null);
+          alert(err?.detail || 'Failed to delete product.');
+          return;
+        }
+        setSelectedProduct((current) => (current?.id === productId ? null : current));
+        setProducts((prev) => prev.filter((p) => p.id !== productId));
+      } catch {
+        alert('Network error — could not delete product.');
+      }
+    },
+    [productsEndpoint]
+  );
+
   useEffect(() => {
     let timer = null;
     let finished = false;
@@ -1461,21 +1480,48 @@ export default function App() {
                           <h4 className="font-bold text-sm text-slate-900 line-clamp-1">
                             {p.name}
                           </h4>
-                          <span
-                            className={`text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
-                              p.status === 'completed' || hasListings
-                                ? 'bg-cyan-50 text-cyan-700 border border-cyan-200'
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <span
+                              className={`text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full ${
+                                p.status === 'completed' || hasListings
+                                  ? 'bg-cyan-50 text-cyan-700 border border-cyan-200'
+                                  : p.status === 'analyzed'
+                                  ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}
+                            >
+                              {p.status === 'completed' || hasListings
+                                ? '⚡ 3 Listings'
                                 : p.status === 'analyzed'
-                                ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                                : 'bg-amber-50 text-amber-700 border border-amber-200'
-                            }`}
-                          >
-                            {p.status === 'completed' || hasListings
-                              ? '⚡ 3 Listings'
-                              : p.status === 'analyzed'
-                              ? 'Analyzed'
-                              : 'Draft'}
-                          </span>
+                                ? 'Analyzed'
+                                : 'Draft'}
+                            </span>
+                            <button
+                              type="button"
+                              title="Delete product"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteProduct(p.id);
+                              }}
+                              className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="w-3.5 h-3.5"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <polyline points="3 6 5 6 21 6" />
+                                <path d="M19 6l-1 14H6L5 6" />
+                                <path d="M10 11v6M14 11v6" />
+                                <path d="M9 6V4h6v2" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                         <div className="flex items-center justify-between text-xs text-slate-500">
                           <span className="font-mono text-emerald-700 font-semibold">
