@@ -9,8 +9,14 @@ export default function AgentLogsConsole({
   const [filter, setFilter] = useState('ALL'); // 'ALL' | 'AGENT1' | 'AGENT2' | 'AGENT3'
   const [copied, setCopied] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
-  const [isMinimized, setIsMinimized] = useState(false);
+  // Collapsed by default: most sellers only need the listings, not the raw logs.
+  // It opens automatically while a run is in progress so progress stays visible.
+  const [isMinimized, setIsMinimized] = useState(true);
   const scrollRef = useRef(null);
+
+  useEffect(() => {
+    if (isExecuting) setIsMinimized(false);
+  }, [isExecuting]);
 
   // Auto-scroll to bottom as new logs arrive
   useEffect(() => {
@@ -102,9 +108,10 @@ export default function AgentLogsConsole({
             <span className="w-3 h-3 rounded-full bg-emerald-500/80 inline-block"></span>
           </div>
           <span className="text-xs font-bold text-slate-200 tracking-wide uppercase flex items-center gap-2">
-            <span>Terminal</span>
-            <span className="text-slate-500">&bull;</span>
-            <span className="text-indigo-400">Autonomous Agent Execution Logs</span>
+            <span className="text-indigo-300">Behind the Scenes</span>
+            <span className="text-slate-400 normal-case font-normal">
+              AI activity log{logs.length > 0 ? ` (${logs.length})` : ''}
+            </span>
           </span>
 
           {isExecuting && (
@@ -117,6 +124,8 @@ export default function AgentLogsConsole({
 
         {/* Console Controls */}
         <div className="flex items-center gap-2">
+          {!isMinimized && (
+          <>
           <button
             type="button"
             onClick={() => setAutoScroll(!autoScroll)}
@@ -150,14 +159,16 @@ export default function AgentLogsConsole({
               Clear
             </button>
           )}
+          </>
+          )}
 
           <button
             type="button"
             onClick={() => setIsMinimized(!isMinimized)}
             aria-expanded={!isMinimized}
-            className="px-2 py-1 rounded text-[11px] text-slate-400 hover:text-white"
+            className="px-2.5 py-1 rounded text-xs font-semibold text-slate-200 hover:text-white border border-slate-700 hover:bg-slate-800"
           >
-            {isMinimized ? 'Expand ▼' : 'Minimize ▲'}
+            {isMinimized ? 'Show ▼' : 'Hide ▲'}
           </button>
         </div>
       </div>
@@ -166,54 +177,57 @@ export default function AgentLogsConsole({
         <>
           {/* Agent Filter Tabs Bar */}
           <div className="bg-slate-900/50 border-b border-slate-800/80 px-4 py-2 flex items-center gap-2 overflow-x-auto text-xs">
-            <span className="text-[11px] text-slate-500 font-semibold mr-1">Filter:</span>
+            <span className="text-xs text-slate-400 font-semibold mr-1">Filter:</span>
             <button
               type="button"
               onClick={() => setFilter('ALL')}
               aria-pressed={filter === 'ALL'}
-              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+              className={`px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all ${
                 filter === 'ALL'
                   ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 bg-slate-900 border border-slate-800'
+                  : 'text-slate-300 hover:text-white bg-slate-900 border border-slate-800'
               }`}
             >
-              All Agents ({logs.length})
+              All ({logs.length})
             </button>
             <button
               type="button"
               onClick={() => setFilter('AGENT1')}
               aria-pressed={filter === 'AGENT1'}
-              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+              title="Agent 1: Product Analyzer"
+              className={`px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all ${
                 filter === 'AGENT1'
                   ? 'bg-purple-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-purple-300 bg-slate-900 border border-slate-800'
+                  : 'text-slate-300 hover:text-purple-300 bg-slate-900 border border-slate-800'
               }`}
             >
-              Agent 1: Product Analyzer ({agent1Count})
+              Agent 1 ({agent1Count})
             </button>
             <button
               type="button"
               onClick={() => setFilter('AGENT2')}
               aria-pressed={filter === 'AGENT2'}
-              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+              title="Agent 2: Market Strategist"
+              className={`px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all ${
                 filter === 'AGENT2'
-                  ? 'bg-amber-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-amber-300 bg-slate-900 border border-slate-800'
+                  ? 'bg-amber-700 text-white shadow-sm'
+                  : 'text-slate-300 hover:text-amber-300 bg-slate-900 border border-slate-800'
               }`}
             >
-              Agent 2: Market Strategist ({agent2Count})
+              Agent 2 ({agent2Count})
             </button>
             <button
               type="button"
               onClick={() => setFilter('AGENT3')}
               aria-pressed={filter === 'AGENT3'}
-              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+              title="Agent 3: Copywriter"
+              className={`px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all ${
                 filter === 'AGENT3'
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-emerald-300 bg-slate-900 border border-slate-800'
+                  ? 'bg-emerald-700 text-white shadow-sm'
+                  : 'text-slate-300 hover:text-emerald-300 bg-slate-900 border border-slate-800'
               }`}
             >
-              Agent 3: Copywriter ({agent3Count})
+              Agent 3 ({agent3Count})
             </button>
           </div>
 
