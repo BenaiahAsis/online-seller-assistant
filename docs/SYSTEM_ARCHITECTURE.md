@@ -1,106 +1,90 @@
-# Online Seller Assistant — System Architecture & Technical Design Document
+# Online Seller Assistant — System Architecture
 
-> **Version:** 2.0.0  
-> **Status:** Production  
-> **Target Audience:** Engineering, AI Assistants (Claude / GPT), Technical Reviewers  
-> **Live Web App:** [https://online-seller-assistant-three.vercel.app](https://online-seller-assistant-three.vercel.app)  
-> **Live API (Render):** [https://online-seller-assistant-backend.onrender.com](https://online-seller-assistant-backend.onrender.com)  
-> **API Swagger Docs:** [https://online-seller-assistant-backend.onrender.com/docs](https://online-seller-assistant-backend.onrender.com/docs)  
+> **API version:** 2.0.0 (`backend/app/config.py`)
+> **Status:** Deployed
+> **Live Web App:** [https://online-seller-assistant-three.vercel.app](https://online-seller-assistant-three.vercel.app)
+> **Live API (Render):** [https://online-seller-assistant-backend.onrender.com](https://online-seller-assistant-backend.onrender.com)
+> **API Swagger Docs:** [https://online-seller-assistant-backend.onrender.com/docs](https://online-seller-assistant-backend.onrender.com/docs)
 > **Repository:** [https://github.com/BenaiahAsis/online-seller-assistant](https://github.com/BenaiahAsis/online-seller-assistant)
 
----
-
-## 1. Executive Summary & Overview
-
-**Online Seller Assistant** is an AI-powered SaaS and microservice platform built for Southeast Asian and global e-commerce sellers (Shopee, Lazada, TikTok Shop, Carousell, and Instagram). It takes raw, unstructured or semi-structured product details (product name, unit cost, quantity, materials, features) and automatically executes an end-to-end, multi-agent AI pipeline to:
-
-1. **Extract & Classify:** Infer deep product taxonomy, detect exact categories (e.g. Wearables & Smartwatches vs. General Merchandise), categorize target demographics, and extract unique selling propositions (USPs).
-2. **Formulate Market Strategy:** Determine market competitive tiering (budget, mid-tier, premium), optimal markup margins, competitor pricing corridors, and audience positioning.
-3. **Generate High-Converting Listings:** Produce platform-tailored, SEO-optimized listing titles, bulleted feature benefits, persuasive descriptions, localized call-to-actions, and high-impact search hashtags.
-4. **Enforce Strict Guardrails:** Run an anti-hallucination validation engine that enforces truthfulness, blocks unverified regulatory claims (e.g. fake "FDA approved" statements), strips AI meta-text ("Here is your listing..."), and validates price boundaries.
-5. **Stream Execution in Real-Time:** Expose live agent execution events to the frontend via Server-Sent Events (SSE) so sellers can see the multi-agent chain of thought in real-time.
+This document describes the system **as it is implemented in this repository**. Ideas that are
+planned but not built are listed separately in [Section 10](#10-not-implemented-future-work).
 
 ---
 
-## 2. High-Level Architecture & Tech Stack
+## 1. Overview
+
+**Online Seller Assistant** helps small online sellers in the Philippines write product listings for
+**Shopee, TikTok Shop, and Lazada**. A seller enters basic product details (name, price in ₱, stock
+quantity, materials, and free-form notes). The backend then runs a sequential three-agent pipeline:
+
+1. **Agent 1 — Product Analyzer:** organizes the raw details into a structured product profile
+   (category, target audience, key specifications, selling points, search keywords).
+2. **Agent 2 — Market Analyzer:** turns that profile into a selling strategy (price tier, ranked
+   selling points, likely buyer concerns, and a positioning angle for each platform).
+3. **Agent 3 — Listing Generator:** writes one ready-to-paste listing per platform (title,
+   description, bullet points, hashtags, call to action).
+
+Agents 2 and 3 pass every AI response through a **validation layer** that rejects schema errors,
+unsupported marketing claims, and text not grounded in the seller's input. When the AI is unavailable
+or its output is rejected, each agent falls back to a deterministic, rule-based result, so the
+pipeline always completes.
+
+---
+
+## 2. Architecture & Tech Stack
 
 ```mermaid
 flowchart TD
     subgraph Client ["Frontend (SPA) — Vercel"]
         UI["React 18 + Vite + Tailwind CSS"]
-        PForm["Product Input Form"]
-        SSEListener["SSE Real-time Stream Client"]
-        ListingCard["Interactive Listing Preview"]
-        ConsoleCard["Agent Thought Log Console"]
+        Form["Product Details Form"]
+        Results["Profile / Strategy / Listings cards"]
+        Logs["Agent activity log console"]
     end
 
-    subgraph Edge ["Networking & Routing"]
-        CORS["FastAPI CORS Middleware\n(localhost:5173, localhost:5174, Vercel)"]
-    end
-
-    subgraph Backend ["Backend Microservice — Render"]
-        API["FastAPI App (ASGI / Uvicorn)"]
-        Router["API v1 Router (/api/v1/products)"]
-        
-        subgraph AgentPipeline ["Sequential Multi-Agent Pipeline"]
-            A1["Agent 1: Product Analyzer\n(Taxonomy, USPs, Category Inference)"]
-            A2["Agent 2: Market Analyzer\n(Pricing Strategy, Tiers, Margins)"]
-            A3["Agent 3: Listing Generator\n(Platform Copy, SEO, Hashtags)"]
-            Val["Validation & Guardrails Engine\n(Anti-Hallucination, Claim Filter)"]
+    subgraph Backend ["Backend — Render (FastAPI + Uvicorn)"]
+        API["REST endpoints (backend/app/main.py)"]
+        RL["SlowAPI rate limiter\n(generation endpoints)"]
+        subgraph Pipeline ["Sequential agent pipeline (backend/app/agents)"]
+            A1["Agent 1: Product Analyzer"]
+            A2["Agent 2: Market Analyzer"]
+            A3["Agent 3: Listing Generator"]
+            Val["validation.py\nschema / claims / grounding gates"]
         end
-        
-        SSE["Streaming Engine\n(Server-Sent Events)"]
-        ORM["SQLAlchemy ORM (Async / Sync Engine)"]
+        ORM["SQLAlchemy 2.0 (sync engine, psycopg2)"]
     end
 
-    subgraph CloudDB ["Database Layer — Neon Serverless"]
-        Postgres[("PostgreSQL 15+\n(Neon Cloud Serverless)")]
-        T_Prod["products table"]
-        T_Analysis["product_analyses table"]
-        T_Listing["product_listings table"]
-    end
+    DB[("Neon PostgreSQL\nproducts · product_analyses · product_listings")]
+    LLM["OpenAI Chat Completions\n(OPENAI_MODEL, default gpt-4o-mini)"]
 
-    subgraph ExternalAI ["LLM Provider — OpenAI"]
-        OpenAI["OpenAI API\n(gpt-4o-mini / gpt-3.5-turbo)\nStructured Output & Prompts"]
-    end
-
-    UI -->|HTTP POST / GET| Router
-    SSEListener <-->|GET /generate-listing/stream| SSE
-    Router --> AgentPipeline
-    AgentPipeline --> Val
-    AgentPipeline <-->|Prompt / JSON| OpenAI
-    SSE -->|SSE Events: agent_start, log, agent_complete| SSEListener
-    Router <--> ORM
-    ORM <--> Postgres
-    Postgres --- T_Prod
-    Postgres --- T_Analysis
-    Postgres --- T_Listing
+    UI -->|"HTTP JSON (fetch)"| API
+    API --> RL --> Pipeline
+    A1 --> A2 --> A3
+    A2 <--> Val
+    A3 <--> Val
+    Pipeline <-->|"JSON prompts / responses"| LLM
+    API <--> ORM <--> DB
 ```
 
-### Technology Breakdown
-
-| Component | Technology | Rationale |
+| Component | Technology | Notes |
 | :--- | :--- | :--- |
-| **Frontend Framework** | React 18, Vite | Instant hot reload, blazing fast build, small bundle size |
-| **Styling & Icons** | Tailwind CSS, Lucide React | Modern responsive design, dark/light theme ready, accessible UI |
-| **Backend Framework** | FastAPI (Python 3.11+) | Asynchronous high-performance web framework, native Pydantic validation, OpenAPI/Swagger docs auto-generation |
-| **Concurrency / Streaming** | `sse-starlette` / `StreamingResponse` | Native Server-Sent Events (SSE) streaming for live agent telemetry without WebSocket overhead |
-| **ORM & Database** | SQLAlchemy 2.0, Neon PostgreSQL | Serverless cloud PostgreSQL with connection pooling, declarative data models, reliable ACID transactions |
-| **AI / LLM Integration** | OpenAI API (`gpt-4o-mini` centralized via `Settings`) | Configurable via `OPENAI_MODEL` setting, low latency, structured JSON mode, deterministic fallback resilience |
-| **Rate Limiting** | SlowAPI (Limits) | 5 requests/min per IP on listing generation endpoints with HTTP 429 backoff |
-| **Validation & Safety** | Custom Rule Engine + Pydantic v2 | Anti-hallucination validation, unverified claim redaction, regex formatting filters |
-| **Deployment / CI** | GitHub Actions, Vercel, Render | Automated linting, pytest testing, continuous deployment on every git push to `main` |
+| **Frontend** | React 18, Vite 5, Tailwind CSS 3 | Single-page app; API base URL from `VITE_API_URL` |
+| **Backend** | FastAPI, Uvicorn, Pydantic v2 | All routes in `backend/app/main.py`; Swagger at `/docs` |
+| **Database** | PostgreSQL (Neon), SQLAlchemy 2.0 (sync) | Tables created at startup; see [Section 3](#3-database-schema) |
+| **AI** | OpenAI Python SDK | Model set by `OPENAI_MODEL` (default `gpt-4o-mini`); deterministic fallback when no key is set |
+| **Rate limiting** | SlowAPI | `RATE_LIMIT_GENERATE_LISTING` (default `5/minute` per IP) on listing generation and full pipeline |
+| **Tooling** | Ruff, Pytest, ESLint | Run in GitHub Actions on every push to `main` and every pull request |
+| **Hosting** | Render (API), Vercel (frontend), Neon (DB) | Render service defined in `render.yaml` |
 
 ---
 
-## 3. Database Schema & Data Models
-
-The relational schema is normalized into three core entities representing the lifecycle of an e-commerce product analysis.
+## 3. Database Schema
 
 ```mermaid
 erDiagram
-    PRODUCT ||--o| PRODUCT_ANALYSIS : "analyzed_by"
-    PRODUCT ||--o{ PRODUCT_LISTING : "has_listings"
+    PRODUCT ||--o| PRODUCT_ANALYSIS : "has one"
+    PRODUCT ||--o{ PRODUCT_LISTING : "has many"
 
     PRODUCT {
         int id PK
@@ -108,22 +92,22 @@ erDiagram
         float price
         int quantity
         string materials
-        string features
-        string category
+        text features
+        string status
         datetime created_at
-        datetime updated_at
     }
 
     PRODUCT_ANALYSIS {
         int id PK
-        int product_id FK
+        int product_id FK "unique"
         string category
-        json target_audience
-        json unique_selling_points
-        string market_tier
-        float recommended_price
-        float estimated_margin
-        json pricing_strategy
+        string target_audience
+        json key_specifications
+        json selling_points
+        json suggested_keywords
+        json market_insights
+        text raw_summary
+        json execution_logs
         datetime created_at
     }
 
@@ -136,284 +120,239 @@ erDiagram
         json bullet_points
         json hashtags
         string call_to_action
-        string tone
         datetime created_at
     }
 ```
 
-### Table Definitions
+Defined in `backend/app/models.py`. Deleting a product cascades to its analysis and listings.
 
-#### `products` Table
-Stores raw merchant input submitted via the frontend or API.
-- `id` (Integer, Primary Key, Auto-increment)
-- `name` (String(255), Not Null) — e.g. "Smartwatch"
-- `price` (Float, Not Null) — Merchant cost/base price (e.g. `20.00`)
-- `quantity` (Integer, Default: 0) — Available stock inventory
-- `materials` (Text, Nullable) — e.g. "aluminum, zinc iron, glass"
-- `features` (Text, Nullable) — e.g. "Free strap, Most bought item"
-- `category` (String(100), Nullable) — Auto-assigned category from Agent 1
-- `created_at` / `updated_at` (DateTime with timezone)
+- **`products`** — raw seller input. `status` moves `draft` → `analyzed` → `completed`.
+- **`product_analyses`** — one row per product.
+  - Agent 1 writes `category`, `target_audience`, `key_specifications`, `selling_points`,
+    `suggested_keywords`, and `raw_summary`.
+  - Agent 2 merges its output into `market_insights` (`price_tier`, `price_rationale`,
+    `priority_points`, `buyer_objections`, `platform_strategies`).
+  - `execution_logs` holds the structured log entries from all three agents.
+- **`product_listings`** — one row per platform (`shopee`, `tiktok`, `lazada`). It is replaced each
+  time listings are regenerated.
 
-#### `product_analyses` Table
-Stores intermediate intelligence generated collaboratively by Agent 1 (Product Analyzer) and Agent 2 (Market Analyzer).
-- `id` (Integer, Primary Key)
-- `product_id` (Integer, Foreign Key -> `products.id`, Unique)
-- `category` (String(100)) — Refined category (e.g. "Electronics & Wearables")
-- `target_audience` (JSON/Array) — Primary personas (e.g. `["Fitness Enthusiasts", "Tech-Savvy Professionals"]`)
-- `unique_selling_points` (JSON/Array) — Extracted selling points
-- `market_tier` (String) — `"Budget"`, `"Mid-Tier"`, or `"Premium"`
-- `recommended_price` (Float) — Calculated optimal retail listing price
-- `estimated_margin` (Float) — Estimated gross profit margin (e.g. `0.35` for 35%)
-- `pricing_strategy` (JSON) — Detailed breakdown including floor price, competitor price range, and discounting tactics
-
-#### `product_listings` Table
-Stores final platform-tailored marketing listings generated by Agent 3 (Listing Generator).
-- `id` (Integer, Primary Key)
-- `product_id` (Integer, Foreign Key -> `products.id`)
-- `platform` (String(50)) — `"shopee"`, `"lazada"`, `"tiktok"`, `"carousell"`, or `"instagram"`
-- `title` (String(255)) — SEO-optimized, click-worthy product title
-- `description` (Text) — Compelling body copy highlighting benefits
-- `bullet_points` (JSON/Array) — Key feature highlights formatted for mobile scanning
-- `hashtags` (JSON/Array) — High-volume and niche discovery tags (e.g. `["#Smartwatch", "#WearableTech"]`)
-- `call_to_action` (String(255)) — Platform-appropriate urgency statement
-- `tone` (String(50)) — e.g. `"Professional"`, `"Persuasive"`, `"Conversational"`
+**Schema changes.** There is no migration tool. On startup, `init_db()` in `backend/app/database.py`
+runs `Base.metadata.create_all()` and then adds two later columns (`market_insights`,
+`execution_logs`) with `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
 
 ---
 
-## 4. The 3-Agent Sequential Pipeline
-
-The core intelligence of the system uses a **pipelined multi-agent workflow** with separation of concerns. Rather than running a monolithic LLM prompt that suffers from context dilution and hallucinations, work is partitioned across three specialized agents.
+## 4. The Three-Agent Pipeline
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Seller as Online Seller (UI)
-    participant API as FastAPI Backend
-    participant A1 as Agent 1: Product Analyzer
-    participant A2 as Agent 2: Market Analyzer
-    participant A3 as Agent 3: Listing Generator
-    participant Val as Validation Engine
-    participant DB as Neon PostgreSQL
+    actor Seller as Seller (browser)
+    participant API as FastAPI
+    participant A1 as Agent 1
+    participant A2 as Agent 2
+    participant A3 as Agent 3
+    participant DB as PostgreSQL
 
-    Seller->>API: POST /api/v1/products (Create Product)
-    API->>DB: INSERT into products
-    DB-->>API: product_id: 20
-    API-->>Seller: Product Created (id: 20)
+    Seller->>API: POST /api/products
+    API->>DB: INSERT product (status=draft)
+    API-->>Seller: ProductResponse (id)
 
-    Seller->>API: GET /api/v1/products/20/generate-listing/stream
-    Note over API,Seller: SSE Connection Opened
-
-    API->>A1: Execute(product)
-    Note over A1: 1. Infer specific category<br/>2. Extract core USPs<br/>3. Identify target demographic
-    A1-->>API: AnalysisStage1 {category: "Wearables & Smartwatches", usps, ...}
-    API-->>Seller: SSE event: "agent_start" -> "agent_complete" (Agent 1)
-
-    API->>A2: Execute(product, AnalysisStage1)
-    Note over A2: 1. Determine pricing tier (Mid-Tier)<br/>2. Calculate optimal margin (35%)<br/>3. Recommend retail price ($27.00 - $35.00)
-    A2-->>API: AnalysisStage2 {market_tier, recommended_price, ...}
-    API-->>Seller: SSE event: "agent_start" -> "agent_complete" (Agent 2)
-
-    API->>A3: Execute(product, AnalysisStage1, AnalysisStage2, platform="shopee")
-    Note over A3: 1. Build platform-tailored copy<br/>2. Apply SEO keywords & hashtags<br/>3. Enforce tone & conversion hooks
-    A3-->>Val: Validate generated listing
-    Note over Val: Anti-hallucination check:<br/>- No unverified claims ("FDA approved")<br/>- No meta-text ("Here is your listing...")<br/>- No raw material hashtags (#zinciron)<br/>- Soften hype claims ("Most bought")
-    Val-->>A3: Listing Verified / Sanitized
-    A3-->>API: Final ProductListing
-    API-->>Seller: SSE event: "agent_start" -> "agent_complete" (Agent 3)
-
-    API->>DB: INSERT / UPDATE product_analyses & product_listings
-    API-->>Seller: SSE event: "pipeline_complete" {listing, analysis}
-    Note over API,Seller: SSE Connection Closed
+    Seller->>API: POST /api/products/{id}/full-pipeline
+    API->>A1: run_product_analysis_agent(product)
+    A1-->>API: profile
+    API->>DB: upsert product_analyses (status=analyzed)
+    API->>A2: run_market_analyzer_agent(product, profile)
+    A2-->>API: market_insights
+    API->>DB: merge market_insights, append logs
+    API->>A3: run_listing_generator_agent(product, profile, market_insights)
+    A3-->>API: 3 listings
+    API->>DB: replace product_listings (status=completed)
+    API-->>Seller: FullPipelineResponse {product, logs}
 ```
 
----
+The full pipeline is one synchronous request. Each step can also be triggered on its own
+(`/analyze`, `/market-analysis`, `/generate-listings`). When an earlier step has not run yet, a later
+step runs it first.
 
-### Deep Dive: Agent Specifications
+### Agent 1 — Product Analyzer (`backend/app/agents/product_analyzer.py`)
+- **Rule-based profile:** keyword rules infer a specific category and target audience (for example,
+  smartwatch terms → "Wearables & Smartwatches"). This profile is always computed and serves as the
+  fallback.
+- **AI enhancement:** if `OPENAI_API_KEY` is set, the model returns a JSON profile (JSON mode).
+  Raw-material and filler words (zinc, iron, "free", "best", …) are removed from its keywords.
+- **Failure handling:** on any API or parsing error, the rule-based profile is used.
+- **Extra output:** for thin input it adds follow-up questions for the seller, and it records
+  unverified claims that were softened (for example, "Most bought item" → "Popular choice among
+  buyers").
 
-#### Agent 1: Product Analyzer (`backend/app/agents/product_analyzer.py`)
-- **Mission:** Extract structure and semantic meaning from raw merchant input.
-- **Category Inference Logic:** Uses rule-based keyword mapping combined with LLM semantic understanding to assign precise, standard retail categories:
-  - Smartwatch, tracker, watch -> `"Wearables & Smartwatches"`
-  - Headphone, earphone, speaker -> `"Audio & Accessories"`
-  - Serum, lotion, skincare -> `"Beauty & Personal Care"`
-  - Shirt, dress, pants -> `"Fashion & Apparel"`
-  - *Never defaults to generic "General Merchandise" when name/materials contain clear indicators.*
-- **Output:** Categorized product identity, target personas, and extracted USPs.
+### Agent 2 — Market Analyzer (`backend/app/agents/market_analyzer.py`)
+- **Price tier:** computed by the backend, not the AI.
+  - **Budget-Friendly:** under ₱500
+  - **Mid-Tier Value:** ₱500 – ₱2,500
+  - **Premium:** over ₱2,500
+- **AI output** (Pydantic model `MarketAnalysis`):
+  - a one-sentence price rationale
+  - 2–5 priority points, each tied back to an Agent 1 selling point by index
+  - 2–4 buyer objections, each with a response angle
+  - a strategy for each platform (focus, angle, tone, emphasised keywords)
+- **Scope rule:** the prompt forbids new product facts, warranties, authenticity, certification, or
+  shipping claims.
 
-#### Agent 2: Market Analyzer (`backend/app/agents/market_analyzer.py`)
-- **Mission:** Formulate competitive commercial strategy based on cost and positioning.
-- **Pricing Strategy Algorithm:**
-  - Evaluates cost structure ($20 base cost).
-  - Determines competitive market tier: Budget (<$15), Mid-Tier ($15-$75), Premium (>$75).
-  - Calculates target margin multiplier (e.g. 1.35x - 1.6x for 35%-60% gross profit).
-  - Identifies competitor benchmarks and promotion corridors (e.g. bundle discounts, flash-sale buffers).
-- **Output:** Pricing recommendation, margin estimation, and competitive positioning report.
-
-#### Agent 3: Listing Generator (`backend/app/agents/listing_generator.py`)
-- **Mission:** Synthesize product specs and market strategy into high-converting e-commerce listings tailored to the selected platform.
-- **Platform Customizations:**
-  - **Shopee / Lazada:** SEO keyword-dense titles, emoji feature benefit bullets, search-indexed hashtags.
-  - **TikTok Shop:** Short, snappy, hook-first conversational tone, viral and trending challenge tags.
-  - **Carousell:** Authentic seller tone, clear condition, meet-up or delivery terms.
-  - **Instagram:** Aesthetic storytelling, lifestyle context, curated aesthetic hashtags.
-- **Strict Anti-Hallucination & Style Rules:**
-  1. **Forbidden Title Prefix:** Never prefix titles with `{name} - ` (e.g. *Forbidden:* `Smartwatch - Modern Smartwatch...`).
-  2. **No AI Meta-Text:** Strip conversational preambles such as *"Here is your optimized listing:"* or *"Certainly! Below is the listing:"*.
-  3. **No Raw Material Hashtags:** Never create hashtags for base metals or chemical names (e.g. never `#zinciron`, `#aluminumiron`).
-  4. **Hype Claim Softening:** Soften unverified merchant claims like *"Most bought item"* into believable marketing phrases like *"Customer Favorite"* or *"Top Trending Pick"*.
-  5. **Banned Health / Regulatory Claims:** Strictly prohibit claims of medical efficacy, cure, or unauthorized regulatory approval (e.g. "FDA approved", "Clinically proven to cure").
-
----
-
-## 5. Anti-Hallucination & Validation Engine (`backend/app/agents/validation.py`)
-
-To ensure enterprise-grade reliability and legal compliance for merchants, all generated copy passes through a deterministic validation and sanitization gate before persistence.
-
-```mermaid
-flowchart TD
-    RawLLM["Raw LLM Output (Agent 3)"] --> C1{"Check 1: Meta-Text Present?\n('Here is your...', 'Sure!...')"}
-    C1 -- Yes --> S1["Strip Meta-Text Preambles via Regex"] --> C2
-    C1 -- No --> C2{"Check 2: Disallowed Claims Present?\n('FDA approved', '100% cure', ...)"}
-    
-    C2 -- Yes --> S2["Scrub & Replace with Compliant Copy\n(or trigger deterministic fallback)"] --> C3
-    C2 -- No --> C3{"Check 3: Material / Junk Hashtags?\n(#zinciron, #aluminum, ...)"}
-
-    C3 -- Yes --> S3["Filter Out Junk Hashtags from Tag Array"] --> C4
-    C3 -- No --> C4{"Check 4: Price & Spec Boundaries?\n(Does price contradict Agent 2?)"}
-
-    C4 -- Fail --> S4["Enforce Hard Boundaries from Agent 2"] --> Valid["Compliant, Validated Listing Saved to DB"]
-    C4 -- Pass --> Valid
-```
-
-### Safety Rules Enforced:
-1. **Unverified Regulatory Claims:** Any mention of "FDA approved", "CE certified" (unless explicitly provided in verified product input) is scrubbed.
-2. **Medical Guarantee Claims:** Blocks "cures", "prevents disease", "100% clinically proven".
-3. **Preamble / Postamble Stripping:** Removes model pleasantries and markdown wrapping artifacts.
-4. **Hashtag Filtering:** Only tags relating to lifestyle, category, or real consumer search terms are retained.
+### Agent 3 — Listing Generator (`backend/app/agents/listing_generator.py`)
+- **Output:** exactly one listing per platform (`ListingBundle` validates that all three are
+  present).
+  - **Shopee:** keyword-rich search title (under 120 characters)
+  - **TikTok Shop:** short hook-first title
+  - **Lazada:** trust-oriented title
+- **Hashtags:** must come from Agent 1's approved keywords or fixed channel tags (`#shopeeph`,
+  `#tiktokshopph`, `#lazadaph`, …). Raw-material tags such as `#zinc` are rejected.
+- **Fallback:** a rule-based template builds all three listings from the seller's own details. The
+  UI labels this "Template version (AI unavailable)".
 
 ---
 
-## 6. Real-Time Telemetry & Streaming (SSE)
+## 5. Validation Layer (`backend/app/agents/validation.py`)
 
-Unlike traditional APIs where users wait 8–15 seconds looking at a generic spinner, Online Seller Assistant implements a **Server-Sent Events (SSE)** architecture:
+Agents 2 and 3 call the model through `call_agent()`, which works as follows:
 
-- **Endpoint:** `GET /api/v1/products/{id}/generate-listing/stream?platform=shopee`
-- **Protocol:** `text/event-stream` over HTTP/1.1 or HTTP/2
-- **Event Schema:**
-  ```json
-  event: agent_start
-  data: {"agent": "product_analyzer", "step": 1, "message": "Analyzing product specifications and extracting USPs..."}
+1. **Strict structured output.** The Pydantic model is converted to a strict JSON schema
+   (`strict_schema()`) and sent with `response_format={"type": "json_schema", "strict": true}`.
+2. **The response passes three gates in order:**
+   - **Schema gate:** the JSON must validate against the Pydantic model.
+   - **Claims gate:** regex rules flag claims the seller never made. Categories:
+     - policy (guarantee, warranty, refund)
+     - authenticity or condition ("authentic", "brand new")
+     - certification ("FDA", "ISO", "certified")
+     - health or safety ("hypoallergenic", "BPA")
+     - durability ("waterproof")
+     - superlative or ranking ("best", "#1")
+     - comparative ("better than")
+     - logistics or stock ("free shipping", "limited stock")
+     - quality assurance ("lab-tested")
 
-  event: agent_complete
-  data: {"agent": "product_analyzer", "step": 1, "result": {"category": "Wearables & Smartwatches"}}
+     A claim is allowed only when supporting words appear in the seller's input.
+   - **Grounding gate:** agent-specific checks that the text reuses the seller's own facts and
+     approved keywords.
+3. **Retry once.** On rejection, the violations go back to the model with an instruction to
+   correct them (`MAX_ATTEMPTS = 2`).
+4. **Fall back.** If both attempts fail, or the API errors, the agent returns its deterministic
+   fallback.
 
-  event: agent_start
-  data: {"agent": "market_analyzer", "step": 2, "message": "Evaluating market pricing corridors and target margins..."}
-
-  event: agent_complete
-  data: {"agent": "market_analyzer", "step": 2, "result": {"market_tier": "Mid-Tier", "recommended_price": 27.0}}
-
-  event: agent_start
-  data: {"agent": "listing_generator", "step": 3, "message": "Generating Shopee-optimized listing and running safety validation..."}
-
-  event: pipeline_complete
-  data: {"status": "success", "listing": {...}, "analysis": {...}}
-  ```
-The frontend consumes this stream using the native browser `EventSource` API, rendering an interactive terminal console with live agent thought traces.
-
----
-
-## 7. REST API Endpoints
-
-All endpoints are versioned under `/api/v1`.
-
-| Method | Endpoint | Description | Request Body | Response |
-| :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/health` | Keep-alive friendly database health check (`SELECT 1`) | None | `{"status": "healthy", "database": "connected"}` |
-| `POST` | `/api/products` | Create new product record | `ProductCreate` JSON | `ProductResponse` (id, name, price, ...) |
-| `GET` | `/api/products` | List all merchant products | None | `ProductListResponse` |
-| `GET` | `/api/products/{id}` | Retrieve product by ID | None | `ProductResponse` |
-| `POST` | `/api/products/{id}/generate-listings` | Execute Agent 3 listing generation **(Rate limited: 5 req/min per IP)** | None | `List[ProductListingResponse]` |
-| `POST` | `/api/products/{id}/full-pipeline` | Execute full 3-agent pipeline synchronously **(Rate limited: 5 req/min per IP)** | None | `FullPipelineResponse` |
-| `GET` | `/api/products/{id}/logs` | Retrieve audit & execution logs for all agents | None | `List[Dict[str, Any]]` |
-| `PATCH` | `/api/listings/{listing_id}` | Customize title, bullets, or description | `ListingUpdate` JSON | `ProductListingResponse` |
-| `GET` | `/api/products/{id}/listings` | Retrieve generated platform listings | None | `List[ProductListingResponse]` |
+Every attempt is recorded as a validation event: accepted, rejected (with gates and violations),
+api_error, or skipped. These events are written into `execution_logs`, so the frontend log console
+shows exactly why an output was accepted or replaced.
 
 ---
 
-## 8. Frontend UI / UX Architecture
+## 6. Execution Logs
+
+`backend/app/agents/logger.py` builds structured entries
+(`timestamp`, `agent`, `stage`, `level`, `message`, `details`) for each agent run and writes them to
+`product_analyses.execution_logs`.
+
+- **Re-runs:** re-running an agent replaces only that agent's entries.
+- **Delivery:** logs are returned in the `full-pipeline` response and from
+  `GET /api/products/{id}/logs`. They are **not streamed**.
+- **Progress display:** while a request is in flight, the frontend shows its own progress messages
+  in the log console. It then replaces them with the stored entries.
+
+---
+
+## 7. REST API
+
+All routes are defined in `backend/app/main.py`. Interactive documentation is available at `/docs`.
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/` | Service metadata |
+| `GET` | `/health` | Runs `SELECT 1`; returns `200` when the database is reachable, otherwise `503` |
+| `POST` | `/api/products` | Create a product (`ProductCreate`) |
+| `GET` | `/api/products` | List all products with analysis and listings |
+| `GET` | `/api/products/{id}` | Get one product |
+| `DELETE` | `/api/products/{id}` | Delete a product, its analysis, and its listings |
+| `POST` | `/api/products/{id}/analyze` | Run Agent 1 |
+| `POST` | `/api/products/{id}/market-analysis` | Run Agent 2 (runs Agent 1 first if needed) |
+| `POST` | `/api/products/{id}/generate-listings` | Run Agent 3 (runs Agents 1–2 first if needed). **Rate limited** |
+| `POST` | `/api/products/{id}/full-pipeline` | Run Agents 1 → 2 → 3 in one request. **Rate limited** |
+| `GET` | `/api/products/{id}/logs` | Get the stored execution logs |
+| `GET` | `/api/products/{id}/listings` | Get the generated listings |
+| `PATCH` | `/api/listings/{listing_id}` | Edit a listing's title, description, bullets, hashtags, or call to action |
+
+The generation and full-pipeline routes also accept hidden aliases kept for backward compatibility:
+`/api/products/{id}/generate-listing` and the same paths under `/api/v1/`. These aliases do not
+appear in the OpenAPI schema.
+
+**Errors.** Unhandled exceptions return a JSON `500` response. A custom middleware ensures CORS
+headers are still attached. Allowed origins come from `CORS_ORIGINS` (comma-separated), plus any
+`https://*.vercel.app` origin.
+
+---
+
+## 8. Frontend Structure
 
 ```
 frontend/src/
+├── App.jsx                       # App state, API calls, layout: form, profile card, catalog, DevOps tab
 ├── components/
-│   ├── ProductForm.jsx          # Input form with validation, price formatting, tags
-│   ├── ListingPreview.jsx       # Multi-platform tab view (Shopee, Lazada, TikTok, etc.)
-│   ├── MarketStrategyCard.jsx   # Visual breakdown of margins, pricing tier, audience
-│   ├── AgentLogsConsole.jsx     # Live terminal displaying SSE agent thought streams
-│   ├── PlatformSelector.jsx     # Radio tabs for switching target e-commerce platforms
-│   ├── CopyButton.jsx           # One-click copy for title, description, or hashtags
-│   └── Header.jsx               # Navigation bar & status indicators
-├── services/
-│   └── api.js                   # Axios client & EventSource stream handler
-├── App.jsx                      # State management & master layout orchestration
-├── index.css                    # Tailwind CSS configuration & custom animations
-└── main.jsx                     # React DOM entry point
+│   ├── AgentLogsConsole.jsx      # Collapsible log console with per-agent filters
+│   ├── MarketStrategyCard.jsx    # Agent 2 output: price level, selling points, buyer concerns, platform angles
+│   └── ListingPreview.jsx        # Agent 3 output: platform tabs, copy buttons, inline title/description editing
+├── index.css                     # Tailwind directives
+└── main.jsx                      # React entry point
 ```
 
-### Key UI Features:
-1. **Interactive Platform Tabs:** Instantly switch between Shopee, Lazada, TikTok Shop, Carousell, and Instagram to view platform-specific adaptations of the same product.
-2. **One-Click Clipboard Copy:** Separate quick-copy buttons for the full listing, title only, or hashtag bundle.
-3. **Live Thought Streaming Console:** Terminal-style UI showing each agent stepping through execution, giving complete transparency to the AI logic.
+**Main features:**
+- One-click example products to fill the form.
+- A four-step progress indicator.
+- A saved-products catalog with search and delete.
+- Per-platform listing tabs with copy buttons for the full listing, title, or description, and
+  inline editing.
+- A **DevOps Health** tab that polls `/health` and shows a notice while the free-tier backend
+  wakes up.
 
 ---
 
-## 9. CI/CD & Deployment Topology
+## 9. CI/CD & Deployment
 
 ```mermaid
 flowchart LR
-    Dev["Developer Git Push"] --> GitHub["GitHub Repository\n(main branch)"]
-    
-    subgraph CI ["GitHub Actions CI Pipeline"]
-        LintPy["Ruff Linter (Python)"]
-        TestPy["Pytest Suite (38 tests)"]
-        LintJS["ESLint (React)"]
-        BuildJS["Vite Build Check"]
+    Dev["git push / pull request"] --> GH["GitHub"]
+    GH --> CI
+    subgraph CI ["GitHub Actions (.github/workflows/ci.yml)"]
+        LintPy["ruff check"]
+        TestPy["pytest (46 tests)"]
+        LintJS["npm run lint"]
+        BuildJS["npm run build"]
     end
-
-    GitHub --> CI
-
-    CI -->|Checks Pass| DeployRender["Render Web Service\n(Auto Deploy Backend API)"]
-    CI -->|Checks Pass| DeployVercel["Vercel Edge Network\n(Auto Deploy Frontend SPA)"]
-
-    DeployRender <--> Neon[("Neon Cloud PostgreSQL")]
-    DeployRender <--> OpenAI["OpenAI API"]
-    DeployVercel <--> DeployRender
+    GH --> Render["Render web service\n(render.yaml)"]
+    GH --> Vercel["Vercel (frontend)"]
+    Render <--> Neon[("Neon PostgreSQL")]
+    Render <--> OpenAI["OpenAI API"]
+    Vercel -->|"VITE_API_URL"| Render
 ```
 
-- **Branch Protection:** All changes land on `main` after passing automated test suites.
-- **Backend Deployment:** Render pulls containerized/native Python environment, applies migrations, runs Uvicorn on `$PORT`.
-- **Frontend Deployment:** Vercel automatically builds static assets via `vite build` and deploys to edge CDN with global caching and instant invalidation.
+- **CI** runs on every push to `main` and on every pull request. It has two jobs:
+  - **Backend:** Python 3.12, `ruff check`, `pytest`.
+  - **Frontend:** Node 20, `npm run lint`, `npm run build`.
+- **Backend deploy:** `render.yaml` sets `rootDir: backend`, installs `requirements.txt`, and starts
+  `uvicorn app.main:app --port $PORT`, with `/health` as the health check. `OPENAI_API_KEY`,
+  `DATABASE_URL`, `JWT_SECRET`, and `CORS_ORIGINS` are set in the Render dashboard.
+- **Frontend deploy:** Vercel builds the `frontend/` app with `vite build`. Its settings are kept in
+  the Vercel dashboard, not in this repository.
+- **Tests never call OpenAI.** The test suite uses in-memory SQLite and stubs the OpenAI client.
 
 ---
 
-## 10. System Context Prompt for Claude Web
+## 10. Not Implemented (Future Work)
 
-When feeding this architecture to Claude Web or another AI assistant, you can prepend the following prompt:
+These items appeared in earlier plans but are **not part of the current code**:
 
-```markdown
-You are an expert full-stack engineer and AI pipeline architect reviewing the "Online Seller Assistant" codebase.
-
-System Summary:
-- Online Seller Assistant is a production-grade SaaS pipeline for e-commerce sellers.
-- Frontend: React 18, Vite, Tailwind CSS (hosted on Vercel: https://online-seller-assistant-three.vercel.app).
-- Backend: FastAPI, Python 3.11+, Pydantic v2 (hosted on Render: https://online-seller-assistant-backend.onrender.com).
-- Database: Neon Serverless PostgreSQL with SQLAlchemy ORM.
-- AI Architecture: Sequential 3-Agent Pipeline (Product Analyzer -> Market Analyzer -> Listing Generator) with an anti-hallucination validation and guardrails engine.
-- Real-time: Server-Sent Events (SSE) streaming live agent thought logs to the browser.
-- Test Suite: 38 passing Pytest unit and integration tests.
-
-When answering questions, proposing features, or writing code for this project:
-1. Preserve the sequential separation of concerns across Agent 1, Agent 2, and Agent 3.
-2. Maintain strict anti-hallucination guardrails: no fake regulatory claims ("FDA approved"), no conversational meta-text, and no raw material hashtags.
-3. Adhere to FastAPI asynchronous patterns, Pydantic v2 schemas, and clean Tailwind CSS UI components.
-```
+- **User accounts / JWT authentication.** `JWT_SECRET` is declared in `.env.example` and
+  `render.yaml`, but no code uses it. All products are visible to every visitor.
+- **Live streaming of agent progress** (Server-Sent Events or WebSockets). Logs are returned after
+  each request completes.
+- **Additional platforms** such as Carousell and Instagram.
+- **Profit-margin or recommended-price calculation.** Agent 2 classifies the seller's price into a
+  tier but does not suggest a different price.
+- **Database migrations** with Alembic.

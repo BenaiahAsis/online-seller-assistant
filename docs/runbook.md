@@ -63,7 +63,9 @@ If a backend release fails or introduces API regressions:
 5. Wait for the service to restart, then verify `/health` and test assistant requests.
 6. Delete/revoke the old key in the OpenAI platform.
 
-### JWT Secret (`JWT_SECRET`) [untested]
+### JWT Secret (`JWT_SECRET`) [reserved, not in use]
+`JWT_SECRET` is declared for planned user authentication, but the current backend does not read it.
+Rotating it has no effect today. If authentication is added later:
 1. Generate a new secure random string (e.g., using `openssl rand -hex 32`).
 2. Open the **Render Dashboard** -> Web Service -> **Environment**.
 3. Update `JWT_SECRET` and click **Save Changes**.

@@ -52,7 +52,7 @@ CI (`.github/workflows/ci.yml`) runs on push to `main` and on PRs: `ruff check .
 - Data model (`app/models.py`): `Product` 1—1 `ProductAnalysis` and 1—N `ProductListing`, all with cascade delete. `ProductAnalysis` stores Agent 1 output plus `market_insights` (Agent 2) and `execution_logs` (JSON array shared by all three agents). `Product.status` moves `draft` → `analyzed` → `completed`.
 - Pipeline (`full-pipeline` in `main.py`) calls the three endpoint functions directly as Python functions, in order: Agent 1 → Agent 2 → Agent 3. Each step first runs its predecessor if the data is missing. Calling the functions directly rather than over HTTP means the rate-limit decorator still applies to the inner call.
 - Re-running an agent replaces only its own log entries. Each log entry carries an `agent` prefix (`"Agent 2 …"`, `"Agent 3 …"`), and the reruns filter on that prefix before appending. Keep that prefix convention if you add log lines.
-- Agent 1 (`agents/product_analyzer.py`) is the structuring step and includes heuristic category/audience inference. Agents 2 and 3 are the LLM-backed ones.
+- Agent 1 (`agents/product_analyzer.py`) is the structuring step. It always builds a rule-based profile, and when a key is set it asks OpenAI in plain JSON mode. It does not use `call_agent` or the validation gates, and it falls back to the rule-based profile on any error.
 - Agents 2 and 3 share `agents/validation.py::call_agent`. It sends a strict JSON-schema chat completion (schema derived from the pydantic model via `strict_schema`, which strips unsupported keywords and forces `additionalProperties: false`), then applies three gates in order: pydantic schema, claim rules (regexes such as "waterproof" or "FDA" that must be supported by seller-provided text in the corpus), and agent-specific grounding checks. On rejection it retries once (`MAX_ATTEMPTS = 2`), feeding the violations back to the model. The per-attempt events are kept and rendered into the execution logs, so gate decisions are visible in the UI. A new guardrail belongs in these gates, not in the endpoint code.
 - Agent 3 (`agents/listing_generator.py`) must return exactly one listing per platform in `PLATFORMS = (shopee, tiktok, lazada)`. Its `ListingBundle` validator enforces this. Its prompt forbids new product facts, so only rephrasing of Agent 1 and 2 output is allowed.
 - Rate limiting: `limiter` (slowapi, keyed by client IP) applies only to the two generation endpoints (`generate-listings` and `full-pipeline`), with the limit from `RATE_LIMIT_GENERATE_LISTING` (default `5/minute`). Other routes are unlimited.
@@ -61,7 +61,7 @@ CI (`.github/workflows/ci.yml`) runs on push to `main` and on PRs: `ruff check .
 ### Frontend: one large component
 
 - `frontend/src/App.jsx` (~1750 lines) holds all app state and the API calls. It has two tabs, `assistant` (product form, pipeline controls, results) and `devops` (polls `GET /health`). The API base is `VITE_API_URL`, defaulting to `http://localhost:8000`.
-- Presentational pieces live in `src/components/`: `ListingPreview`, `MarketStrategyCard`, and `AgentLogsConsole`. They receive data through props from `App.jsx` and do not fetch.
+- Presentational pieces live in `src/components/`: `ListingPreview`, `MarketStrategyCard`, and `AgentLogsConsole`. They receive data through props from `App.jsx`. The one exception is `ListingPreview`, which sends its own `PATCH /api/listings/{id}` when a listing is edited.
 - `SAMPLE_PRODUCTS` at the top of `App.jsx` is demo seed data for the form. It is not fetched from the backend.
 
 ### Deployment
@@ -69,6 +69,8 @@ CI (`.github/workflows/ci.yml`) runs on push to `main` and on PRs: `ruff check .
 - Backend deploys to Render using `render.yaml` (`rootDir: backend`, `startCommand` uses `$PORT`, health check `/health`). Env vars are `sync: false`, so they must be set in the Render dashboard.
 - Frontend deployment (Vercel, per the docs) is not configured in the repo.
 
-## Docs that are out of date
+## Docs
 
-`docs/SYSTEM_ARCHITECTURE.md` describes JWT authentication, Server-Sent Events streaming, and an async `/api/v1` router. None of these exist in the code: `grep` for `jwt`, `EventSource`, or `StreamingResponse` in `backend/app` and `frontend/src` finds nothing, and the only `/api/v1` routes are the hidden aliases in `main.py`. The repository-structure tree in `README.md` is also stale (it lists only the health-check files). Verify against the code before relying on either document.
+`README.md` and `docs/SYSTEM_ARCHITECTURE.md` describe the code as implemented. Keep them in sync when you change endpoints, agents, env vars, or the file layout. Features that are planned but not built are listed in the "Not Implemented (Future Work)" section of the architecture doc: JWT auth (`JWT_SECRET` is declared but unused), SSE streaming, and extra platforms.
+
+`docs/SPRINT_DELIVERABLES.md` and `docs/tutorials/` are historical sprint plans. They mention features that were never built (e.g. an Instagram tab), so don't treat them as a spec.
