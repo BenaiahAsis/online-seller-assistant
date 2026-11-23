@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import ListingPreview from './components/ListingPreview';
 import MarketStrategyCard from './components/MarketStrategyCard';
 import AgentLogsConsole from './components/AgentLogsConsole';
@@ -53,7 +53,10 @@ export default function App() {
   // Products & Agent State
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
+  const [productsLoaded, setProductsLoaded] = useState(false);
+  const [productsError, setProductsError] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const resultsRef = useRef(null);
   const [submitting, setSubmitting] = useState(false);
   const [analyzingId, setAnalyzingId] = useState(null);
   const [runningMarketId, setRunningMarketId] = useState(null);
@@ -163,13 +166,26 @@ export default function App() {
           }
           return current;
         });
+        setProductsError(null);
+        setProductsLoaded(true);
+      } else {
+        setProductsError(`The server responded with an error (HTTP ${response.status}).`);
       }
     } catch (err) {
       console.warn('Unable to load product list:', err);
+      setProductsError('Could not reach the server. Check your connection and try again.');
     } finally {
       setProductsLoading(false);
     }
   }, [productsEndpoint]);
+
+  // Select a product from the catalog and bring its results into view
+  const handleSelectFromCatalog = useCallback((product) => {
+    setSelectedProduct(product);
+    requestAnimationFrame(() => {
+      resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, []);
 
   const handleDeleteProduct = useCallback(
     async (productId) => {
@@ -692,18 +708,17 @@ export default function App() {
                   v3.0
                 </span>
               </div>
-              <span className="text-[11px] text-slate-500 font-mono flex items-center gap-1.5">
-                <span>Autonomous 3-Agent AI Pipeline</span>
-                <span>&bull;</span>
-                <span className="text-emerald-700">PostgreSQL (Neon)</span>
+              <span className="text-xs text-slate-600">
+                AI listing writer for Shopee, TikTok Shop &amp; Lazada
               </span>
             </div>
           </div>
 
           {/* Navigation Controls */}
-          <div className="flex items-center gap-2">
+          <nav aria-label="Main" className="flex items-center gap-2">
             <button
               type="button"
+              aria-current={activeTab === 'assistant' ? 'page' : undefined}
               onClick={() => setActiveTab('assistant')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                 activeTab === 'assistant'
@@ -716,6 +731,7 @@ export default function App() {
             </button>
             <button
               type="button"
+              aria-current={activeTab === 'devops' ? 'page' : undefined}
               onClick={() => setActiveTab('devops')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                 activeTab === 'devops'
@@ -734,7 +750,7 @@ export default function App() {
               />
               <span>DevOps Health</span>
             </button>
-          </div>
+          </nav>
         </div>
       </header>
 
@@ -804,22 +820,22 @@ export default function App() {
             <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm relative overflow-hidden">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
-                  <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-600">
-                    <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
-                    Sequential Multi-Agent Architecture
+                  <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-700">
+                    <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                    Powered by 3 AI assistants
                   </div>
                   <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                    Autonomous E-Commerce Listing Studio
+                    Turn product notes into ready-to-post listings
                   </h1>
-                  <p className="text-xs sm:text-sm text-slate-700 max-w-2xl leading-relaxed">
-                    Transform raw product specs into high-converting, platform-tailored listings with full audit logging and anti-hallucination guardrails.
+                  <p className="text-sm text-slate-700 max-w-2xl leading-relaxed">
+                    Type in what you know about your product. We&apos;ll organize it, plan how to sell it, and write listings for Shopee, TikTok Shop, and Lazada that only use the facts you gave us.
                   </p>
                 </div>
 
                 {/* Sample Presets */}
                 <div className="space-y-1.5 flex-shrink-0">
-                  <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold block">
-                    1-Click Demo Presets:
+                  <span className="text-xs font-semibold text-slate-600 block">
+                    New here? Try an example:
                   </span>
                   <div className="flex items-center gap-2 flex-wrap">
                     {SAMPLE_PRODUCTS.map((s, idx) => (
@@ -852,10 +868,10 @@ export default function App() {
                       <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">
                         1
                       </span>
-                      <span className="text-xs font-bold text-slate-900">Input Details</span>
+                      <span className="text-xs font-bold text-slate-900">Your product</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-1">
-                      Raw product parameters
+                    <p className="text-xs text-slate-600 mt-1">
+                      Name, price &amp; features
                     </p>
                   </div>
 
@@ -873,10 +889,10 @@ export default function App() {
                       <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 text-xs font-bold flex items-center justify-center">
                         2
                       </span>
-                      <span className="text-xs font-bold text-slate-900">Agent 1: Analysis</span>
+                      <span className="text-xs font-bold text-slate-900">Understand it</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-1">
-                      Category, specs &amp; SEO tags
+                    <p className="text-xs text-slate-600 mt-1">
+                      Category, key specs &amp; keywords
                     </p>
                   </div>
 
@@ -894,10 +910,10 @@ export default function App() {
                       <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-700 text-xs font-bold flex items-center justify-center">
                         3
                       </span>
-                      <span className="text-xs font-bold text-slate-900">Agent 2: Strategy</span>
+                      <span className="text-xs font-bold text-slate-900">Plan how to sell</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-1">
-                      Pricing tier &amp; hesitations
+                    <p className="text-xs text-slate-600 mt-1">
+                      Price level &amp; buyer concerns
                     </p>
                   </div>
 
@@ -915,10 +931,10 @@ export default function App() {
                       <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold flex items-center justify-center">
                         4
                       </span>
-                      <span className="text-xs font-bold text-slate-900">Agent 3: Listings</span>
+                      <span className="text-xs font-bold text-slate-900">Write listings</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-1">
-                      Shopee, TikTok, Lazada
+                    <p className="text-xs text-slate-600 mt-1">
+                      Shopee, TikTok Shop &amp; Lazada
                     </p>
                   </div>
                 </div>
@@ -934,10 +950,10 @@ export default function App() {
                   <div className="border-b border-slate-200 pb-3">
                     <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
                       <span>📝</span>
-                      <span>Raw Product Input Form</span>
+                      <span>Product Details</span>
                     </h2>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Enter unorganized product notes or select a demo preset above.
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      Messy notes are fine. Paste what your supplier gave you, or try an example above.
                     </p>
                   </div>
 
@@ -1088,11 +1104,11 @@ export default function App() {
                                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                               />
                             </svg>
-                            <span>Executing 3-Agent Pipeline...</span>
+                            <span>Writing your listings...</span>
                           </>
                         ) : (
                           <>
-                            <span>⚡ Submit &amp; Run Full 3-Agent Pipeline</span>
+                            <span>⚡ Create My Listings</span>
                           </>
                         )}
                       </button>
@@ -1107,9 +1123,9 @@ export default function App() {
                         className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-xs transition-all bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 border border-slate-300 disabled:opacity-50"
                       >
                         {analyzingId !== null ? (
-                          <span>Analyzing with Agent 1...</span>
+                          <span>Analyzing your product...</span>
                         ) : (
-                          <span>Or Submit &amp; Run Agent 1 Only</span>
+                          <span>Just analyze the product (no listings yet)</span>
                         )}
                       </button>
                     </div>
@@ -1126,15 +1142,18 @@ export default function App() {
               </div>
 
               {/* Right Column (7 cols): Agent 1, Agent 2 & Agent 3 Cards */}
-              <div className="lg:col-span-7 space-y-6">
+              <div ref={resultsRef} className="lg:col-span-7 space-y-6 scroll-mt-24">
                 {/* Agent 1 Card: Structured Product Profile */}
                 <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-sm space-y-5">
                   <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full bg-purple-500 "></span>
                       <h2 className="text-lg font-bold text-slate-900">
-                        Agent 1: Structured Profile
+                        Product Profile
                       </h2>
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-800 border border-purple-200">
+                        Agent 1
+                      </span>
                     </div>
                     {selectedProduct && (
                       <span
@@ -1147,7 +1166,7 @@ export default function App() {
                         }`}
                       >
                         {selectedProduct.status === 'completed'
-                          ? '⚡ 3-Agent Pipeline Done'
+                          ? '✓ Listings ready'
                           : selectedProduct.status === 'analyzed'
                           ? 'Analyzed'
                           : 'Draft'}
@@ -1191,8 +1210,8 @@ export default function App() {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow transition-all disabled:opacity-50"
                           >
                             {runningPipelineId === selectedProduct.id
-                              ? 'Running Pipeline...'
-                              : '⚡ Run Full Pipeline'}
+                              ? 'Writing listings...'
+                              : '⚡ Regenerate Listings'}
                           </button>
 
                           <button
@@ -1203,7 +1222,7 @@ export default function App() {
                           >
                             {analyzingId === selectedProduct.id
                               ? 'Analyzing...'
-                              : 'Re-run Agent 1'}
+                              : 'Re-analyze Product'}
                           </button>
                         </div>
                       </div>
@@ -1240,7 +1259,7 @@ export default function App() {
                               <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3.5 text-xs text-indigo-700 space-y-2 shadow-sm">
                                 <div className="flex items-center gap-1.5 font-bold text-indigo-700">
                                   <span>💡</span>
-                                  <span>Thin Input Detected &bull; Suggested Seller Follow-up Questions:</span>
+                                  <span>Add these details to get better listings:</span>
                                 </div>
                                 <ul className="list-disc list-inside space-y-1 text-slate-700 pl-1">
                                   {selectedProduct.analysis.market_insights.suggested_questions.map((q, idx) => (
@@ -1378,7 +1397,7 @@ export default function App() {
                     </div>
                   ) : (
                     <div className="text-center py-10 text-slate-500 text-sm">
-                      Select or add a product to inspect Agent 1&apos;s output.
+                      Fill in the product details form, or pick a saved product below, to see its profile here.
                     </div>
                   )}
                 </div>
@@ -1414,17 +1433,20 @@ export default function App() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
                 <div>
                   <h3 className="text-base font-bold text-slate-900">
-                    Saved Product Catalog
+                    Your Saved Products
                   </h3>
-                  <p className="text-xs text-slate-500">
-                    Live records in Neon PostgreSQL ({products.length} products stored)
+                  <p className="text-xs text-slate-600">
+                    {productsLoaded
+                      ? `${products.length} product${products.length === 1 ? '' : 's'} saved. Click one to view its listings.`
+                      : 'Loading your products...'}
                   </p>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <input
-                    type="text"
-                    placeholder="Search catalog..."
+                    type="search"
+                    aria-label="Search saved products"
+                    placeholder="Search products..."
                     value={catalogSearch}
                     onChange={(e) => setCatalogSearch(e.target.value)}
                     className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 w-44 sm:w-60"
@@ -1455,11 +1477,43 @@ export default function App() {
                 </div>
               </div>
 
-              {filteredCatalog.length === 0 ? (
-                <div className="text-center py-8 text-xs text-slate-500">
+              {productsError && !productsLoading ? (
+                <div
+                  role="alert"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-rose-50 border border-rose-200 rounded-xl p-4 text-sm text-rose-800"
+                >
+                  <span>
+                    <strong>Couldn&apos;t load your products.</strong> {productsError}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={fetchProducts}
+                    className="self-start sm:self-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-rose-300 text-rose-800 hover:bg-rose-100"
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : !productsLoaded ? (
+                <div
+                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"
+                  aria-busy="true"
+                  aria-label="Loading saved products"
+                >
+                  {[0, 1, 2].map((i) => (
+                    <div
+                      key={i}
+                      className="rounded-xl p-4 border border-slate-200 bg-slate-50 space-y-3 animate-pulse"
+                    >
+                      <div className="h-4 w-2/3 rounded bg-slate-200" />
+                      <div className="h-3 w-1/2 rounded bg-slate-200" />
+                    </div>
+                  ))}
+                </div>
+              ) : filteredCatalog.length === 0 ? (
+                <div className="text-center py-8 text-sm text-slate-600">
                   {catalogSearch
-                    ? 'No products match your search query.'
-                    : 'No products in database yet. Use the form above to add your first product.'}
+                    ? `No products match "${catalogSearch}".`
+                    : 'You have no saved products yet. Fill in the product details form above to create your first listing.'}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1469,45 +1523,59 @@ export default function App() {
                     return (
                       <div
                         key={p.id}
-                        onClick={() => setSelectedProduct(p)}
-                        className={`cursor-pointer rounded-xl p-4 border transition-all text-left space-y-2 ${
+                        className={`relative rounded-xl border transition-all ${
                           isSelected
                             ? 'bg-indigo-50 border-indigo-500 shadow-sm ring-1 ring-indigo-500'
-                            : 'bg-slate-50 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                            : 'bg-slate-50 border-slate-200 hover:border-indigo-300 hover:bg-white'
                         }`}
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <h4 className="font-bold text-sm text-slate-900 line-clamp-1">
-                            {p.name}
-                          </h4>
-                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleSelectFromCatalog(p)}
+                          aria-current={isSelected ? 'true' : undefined}
+                          className="w-full text-left p-4 pr-12 space-y-2 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <h4 className="font-bold text-sm text-slate-900 truncate" title={p.name}>
+                              {p.name}
+                            </h4>
                             <span
-                              className={`text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full ${
+                              className={`text-[11px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
                                 p.status === 'completed' || hasListings
-                                  ? 'bg-cyan-50 text-cyan-700 border border-cyan-200'
+                                  ? 'bg-cyan-50 text-cyan-800 border border-cyan-200'
                                   : p.status === 'analyzed'
-                                  ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  ? 'bg-purple-50 text-purple-800 border border-purple-200'
+                                  : 'bg-amber-50 text-amber-800 border border-amber-200'
                               }`}
                             >
                               {p.status === 'completed' || hasListings
-                                ? '⚡ 3 Listings'
+                                ? 'Listings ready'
                                 : p.status === 'analyzed'
                                 ? 'Analyzed'
                                 : 'Draft'}
                             </span>
-                            <button
-                              type="button"
-                              title="Delete product"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteProduct(p.id);
-                              }}
-                              className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                            >
+                          </div>
+                          <div className="flex items-center justify-between gap-2 text-xs text-slate-600">
+                            <span className="font-mono text-emerald-800 font-semibold">
+                              ₱{Number(p.price).toFixed(2)}
+                            </span>
+                            <span className="font-mono">Qty: {p.quantity}</span>
+                            <span className="truncate max-w-[140px]">
+                              {p.analysis?.category || 'Uncategorized'}
+                            </span>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          title="Delete product"
+                          aria-label={`Delete ${p.name}`}
+                          onClick={() => handleDeleteProduct(p.id)}
+                          className="absolute top-2.5 right-2.5 p-2 rounded-lg text-slate-500 hover:text-rose-700 hover:bg-rose-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 transition-colors"
+                        >
                               <svg
                                 xmlns="http://www.w3.org/2000/svg"
-                                className="w-3.5 h-3.5"
+                                aria-hidden="true"
+                                className="w-4 h-4"
                                 viewBox="0 0 24 24"
                                 fill="none"
                                 stroke="currentColor"
@@ -1520,20 +1588,7 @@ export default function App() {
                                 <path d="M10 11v6M14 11v6" />
                                 <path d="M9 6V4h6v2" />
                               </svg>
-                            </button>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between text-xs text-slate-500">
-                          <span className="font-mono text-emerald-700 font-semibold">
-                            ₱{Number(p.price).toFixed(2)}
-                          </span>
-                          <span className="font-mono text-slate-500">
-                            Qty: {p.quantity}
-                          </span>
-                          <span className="text-slate-500 text-[11px] truncate max-w-[120px]">
-                            {p.analysis?.category || 'Uncategorized'}
-                          </span>
-                        </div>
+                        </button>
                       </div>
                     );
                   })}
