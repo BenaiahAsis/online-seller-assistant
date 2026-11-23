@@ -6,7 +6,7 @@ const PLATFORMS = [
     label: 'Shopee PH',
     badge: 'Search & Spec Optimized',
     icon: '🛍️',
-    activeClass: 'bg-orange-600 text-white',
+    activeClass: 'bg-orange-700 text-white',
   },
   {
     id: 'tiktok',
@@ -98,20 +98,30 @@ export default function ListingPreview({
       }`
     : '';
 
-  const handleCopyFull = () => {
+  const handleCopyFull = async () => {
     if (!currentListingText) return;
-    navigator.clipboard.writeText(currentListingText);
+    try {
+      await navigator.clipboard.writeText(currentListingText);
+    } catch {
+      setCopiedPart('Copy failed: select the text and copy it manually.');
+      setTimeout(() => setCopiedPart(null), 4000);
+      return;
+    }
     if (setCopied) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
   };
 
-  const handleCopySnippet = (text, label) => {
+  const handleCopySnippet = async (text, label) => {
     if (!text) return;
-    navigator.clipboard.writeText(text);
-    setCopiedPart(label);
-    setTimeout(() => setCopiedPart(null), 2000);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedPart(`✓ ${label} copied!`);
+    } catch {
+      setCopiedPart('Copy failed: select the text and copy it manually.');
+    }
+    setTimeout(() => setCopiedPart(null), 2500);
   };
 
   const marketInsights = product.analysis?.market_insights;
@@ -135,23 +145,23 @@ export default function ListingPreview({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-              Agent 3 &bull; Copywriter Studio
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+              Agent 3
             </span>
             {isFallbackUsed && (
-              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1 shadow-sm">
-                <span>⚠️</span> Fallback used
+              <span
+                title="The AI service was unavailable, so these listings were built from a standard template using your product details. Regenerate later for AI-written copy."
+                className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1"
+              >
+                <span aria-hidden="true">⚠️</span> Template version (AI unavailable)
               </span>
             )}
-            <span className="text-xs text-slate-500">
-              Multi-Platform E-Commerce Listings
-            </span>
           </div>
           <h3 className="text-lg font-bold text-slate-900 mt-1">
-            Tailored Marketplace Listings
+            Your Listings
           </h3>
-          <p className="text-xs text-slate-500">
-            Platform-optimized copy for Shopee, TikTok Shop, and Lazada.
+          <p className="text-xs text-slate-600">
+            Ready to copy and paste into Shopee, TikTok Shop, and Lazada.
           </p>
         </div>
 
@@ -173,7 +183,7 @@ export default function ListingPreview({
           ) : (
             <>
               <span className="text-sm">⚡</span>
-              <span>Re-Generate Pipeline (All 3 Agents)</span>
+              <span>Regenerate Listings</span>
             </>
           )}
         </button>
@@ -190,6 +200,7 @@ export default function ListingPreview({
               <button
                 key={platform.id}
                 type="button"
+                aria-pressed={isActive}
                 onClick={() => {
                   setIsEditing(false);
                   if (onSelectPlatform) onSelectPlatform(platform.id);
@@ -197,10 +208,10 @@ export default function ListingPreview({
                 className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
                   isActive
                     ? platform.activeClass
-                    : 'bg-white text-slate-500 hover:text-slate-900 border border-slate-200 hover:border-slate-300'
+                    : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200 hover:border-slate-300'
                 }`}
               >
-                <span>{platform.icon}</span>
+                <span aria-hidden="true">{platform.icon}</span>
                 <span>{platform.label}</span>
               </button>
             );
@@ -211,8 +222,8 @@ export default function ListingPreview({
         {currentListing && (
           <div className="flex items-center gap-2 flex-wrap">
             {copiedPart && (
-              <span className="text-xs text-emerald-700 font-medium animate-pulse">
-                ✓ {copiedPart} copied!
+              <span role="status" className="text-xs text-emerald-800 font-medium">
+                {copiedPart}
               </span>
             )}
             <button
@@ -225,7 +236,7 @@ export default function ListingPreview({
             <button
               type="button"
               onClick={handleCopyFull}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-sm active:scale-95"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-700 hover:bg-emerald-800 text-white transition-all shadow-sm active:scale-95"
             >
               {copied ? '✓ Copied to Clipboard!' : '📋 Copy Entire Listing'}
             </button>
@@ -266,7 +277,7 @@ export default function ListingPreview({
                 <button
                   type="button"
                   onClick={() => handleCopySnippet(currentListing.title, 'Title')}
-                  className="text-[11px] text-indigo-600 hover:text-indigo-700 transition-colors"
+                  className="px-2.5 py-1 rounded-md text-xs font-semibold text-indigo-700 hover:bg-indigo-50 border border-indigo-200 transition-colors"
                 >
                   Copy Title
                 </button>
@@ -318,7 +329,7 @@ export default function ListingPreview({
                 <button
                   type="button"
                   onClick={() => handleCopySnippet(currentListing.description, 'Description')}
-                  className="text-[11px] text-indigo-600 hover:text-indigo-700 transition-colors"
+                  className="px-2.5 py-1 rounded-md text-xs font-semibold text-indigo-700 hover:bg-indigo-50 border border-indigo-200 transition-colors"
                 >
                   Copy Description
                 </button>
