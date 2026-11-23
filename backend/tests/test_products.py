@@ -89,6 +89,17 @@ def test_get_nonexistent_product():
     assert res.status_code == 404
 
 
+def test_create_product_rejects_oversized_features():
+    """Features over 2000 characters are rejected before reaching the agents."""
+    base = {"name": "Desk Organizer", "price": 199.0, "quantity": 5}
+
+    ok = client.post("/api/products", json={**base, "features": "x" * 2000})
+    assert ok.status_code == 201
+
+    too_long = client.post("/api/products", json={**base, "features": "x" * 2001})
+    assert too_long.status_code == 422
+
+
 def test_trigger_product_analysis_agent():
     """Verify Agent 1 executes and stores structured analysis."""
     create_res = client.post(

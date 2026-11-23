@@ -5,13 +5,25 @@ product listings with less effort. Sellers enter basic product details such as n
 price, features, materials, and quantity. The app then runs them through a sequential
 three-agent AI workflow:
 
-1. **Product Analysis Agent** organizes the raw details into a structured product profile.
-2. **Market Analysis Agent** identifies target customers, selling points, and keywords.
-3. **Listing Generation Agent** writes a complete, ready-to-use product listing.
+1. **Product Analysis Agent** organizes the raw details into a structured product profile
+   (category, target audience, key specs, selling points, and search keywords).
+2. **Market Analysis Agent** plans how to sell it: price tier, ranked selling points,
+   likely buyer concerns, and an angle for each platform.
+3. **Listing Generation Agent** writes ready-to-paste listings for Shopee, TikTok Shop,
+   and Lazada.
 
-The backend validates each agent's output before passing it to the next one and stores
-the products, analyses, and listings in a PostgreSQL database. Sellers can review and
-edit the final listing before saving it.
+The backend validates each AI response before using it. It rejects schema errors and claims
+the seller never made, such as "waterproof" or "FDA approved". If the AI is unavailable or
+its output keeps failing validation, each agent falls back to a rule-based result. Products,
+analyses, listings, and execution logs are stored in PostgreSQL. Sellers can review, copy,
+and edit the final listings.
+
+- **Live app:** https://online-seller-assistant-three.vercel.app
+- **API docs (Swagger):** https://online-seller-assistant-backend.onrender.com/docs
+- **Architecture:** [docs/SYSTEM_ARCHITECTURE.md](docs/SYSTEM_ARCHITECTURE.md)
+
+> The backend runs on Render's free tier, so the first request after a period of
+> inactivity can take up to a minute while the server wakes up.
 
 ---
 
@@ -23,10 +35,13 @@ edit the final listing before saving it.
 | **Styling** | [Tailwind CSS](https://tailwindcss.com/) | Modern utility-first responsive styling |
 | **Frontend Tooling** | [ESLint](https://eslint.org/) | Code quality and React standards enforcement |
 | **Backend** | [FastAPI](https://fastapi.tiangolo.com/) | High-performance asynchronous Python API framework |
-| **ORM / Database** | [SQLAlchemy 2.0](https://www.sqlalchemy.org/) + [PostgreSQL](https://www.postgresql.org/) | Relational database modeling, migrations, and queries |
+| **ORM / Database** | [SQLAlchemy 2.0](https://www.sqlalchemy.org/) + [PostgreSQL](https://www.postgresql.org/) (Neon) | Relational data models and queries |
 | **Backend Tooling** | [Ruff](https://docs.astral.sh/ruff/) + [Pytest](https://docs.pytest.org/) | Lightning-fast Python linting/formatting and test automation |
-| **AI Integration** | [OpenAI API](https://platform.openai.com/) | Intelligent customer interaction and product descriptions |
-| **Authentication** | JWT (JSON Web Tokens) | Stateless, secure user session management |
+| **AI Integration** | [OpenAI API](https://platform.openai.com/) (`gpt-4o-mini` by default) | Product analysis, selling strategy, and listing copy, with structured JSON output |
+| **Rate Limiting** | [SlowAPI](https://github.com/laurentS/slowapi) | Limits listing generation to 5 requests/minute per IP by default |
+| **CI / Hosting** | GitHub Actions, Render, Vercel | Lint, test, and build on every push; API on Render, frontend on Vercel |
+
+> There is no user login yet. All saved products are visible to every visitor.
 
 ---
 
@@ -34,30 +49,40 @@ edit the final listing before saving it.
 
 ```text
 online-seller-assistant/
-├── .env.example             # Template for all environment variables (keys empty)
-├── .gitignore                # Ignores .env, node_modules, __pycache__, venv
-├── README.md                 # Project documentation and developer guide
+├── .env.example                  # Template for all environment variables (values empty)
+├── .github/workflows/ci.yml      # CI: Ruff + Pytest (backend), ESLint + Vite build (frontend)
+├── render.yaml                   # Render web service definition for the backend
+├── docs/                         # Architecture, pipeline, runbook, onboarding, team guides
 ├── backend/
 │   ├── app/
-│   │   ├── __init__.py
-│   │   ├── database.py       # SQLAlchemy connection & SELECT 1 health check
-│   │   └── main.py           # FastAPI entrypoint with CORS & GET /health
-│   ├── tests/
-│   │   ├── __init__.py
-│   │   └── test_health.py    # Pytest suite for API and database health
-│   ├── pyproject.toml        # Ruff linter/formatter & pytest configuration
-│   └── requirements.txt      # Python dependencies
+│   │   ├── main.py               # FastAPI app: CORS, error handling, all REST endpoints
+│   │   ├── config.py             # Settings (OpenAI model, CORS origins, rate limit)
+│   │   ├── database.py           # Engine/session setup, table creation, SELECT 1 health check
+│   │   ├── models.py             # SQLAlchemy models: Product, ProductAnalysis, ProductListing
+│   │   ├── schemas.py            # Pydantic request/response schemas
+│   │   ├── limiter.py            # SlowAPI rate limiter
+│   │   └── agents/
+│   │       ├── product_analyzer.py   # Agent 1: structured product profile
+│   │       ├── market_analyzer.py    # Agent 2: price tier, buyer concerns, platform strategy
+│   │       ├── listing_generator.py  # Agent 3: Shopee / TikTok Shop / Lazada listings
+│   │       ├── validation.py         # Schema, claims, and grounding gates with one retry
+│   │       └── logger.py             # Structured execution logs stored per product
+│   ├── tests/                    # Pytest suite (in-memory SQLite, OpenAI stubbed)
+│   ├── pyproject.toml            # Ruff and pytest configuration
+│   └── requirements.txt          # Python dependencies
 └── frontend/
     ├── src/
-    │   ├── App.jsx           # Main monitor UI querying GET /health
-    │   ├── main.jsx          # React DOM entrypoint
-    │   └── index.css         # Tailwind directives
-    ├── index.html            # Vite HTML template
-    ├── package.json          # Node dependencies & scripts
-    ├── vite.config.js        # Vite build configuration
-    ├── tailwind.config.js    # Tailwind content & theme configuration
-    ├── postcss.config.js     # PostCSS pipeline for Tailwind & Autoprefixer
-    └── eslint.config.js      # ESLint flat config with React rules
+    │   ├── App.jsx               # App state, API calls, form, product profile, catalog, DevOps tab
+    │   ├── components/
+    │   │   ├── AgentLogsConsole.jsx    # Collapsible agent activity log
+    │   │   ├── MarketStrategyCard.jsx  # Agent 2 output
+    │   │   └── ListingPreview.jsx      # Agent 3 output with copy and edit
+    │   ├── main.jsx              # React DOM entrypoint
+    │   └── index.css             # Tailwind directives
+    ├── package.json              # Node dependencies & scripts
+    ├── vite.config.js            # Vite configuration (dev server on port 5173)
+    ├── tailwind.config.js        # Tailwind configuration
+    └── eslint.config.js          # ESLint flat config with React rules
 ```
 
 ---
@@ -90,10 +115,16 @@ automatically when started from `backend/`.
 
 ### Variables
 
-- `OPENAI_API_KEY`: API key for OpenAI assistant features.
+- `OPENAI_API_KEY`: API key for the AI agents. If empty, every agent uses its rule-based fallback, so the app still works offline.
 - `DATABASE_URL`: Connection string for PostgreSQL (e.g., `postgresql://postgres:password@localhost:5432/seller_db`).
-- `JWT_SECRET`: Secret key used for signing and verifying JSON Web Tokens.
+- `CORS_ORIGINS`: Comma-separated list of allowed frontend origins (defaults to the local Vite ports). Any `https://*.vercel.app` origin is also allowed.
 - `VITE_API_URL`: Backend base URL used by the frontend (defaults to `http://localhost:8000`).
+- `JWT_SECRET`: Reserved for planned user authentication. Not used by the current code.
+
+Optional backend settings (not in `.env.example`):
+
+- `OPENAI_MODEL`: OpenAI model name (default `gpt-4o-mini`).
+- `RATE_LIMIT_GENERATE_LISTING`: Rate limit for listing generation and the full pipeline (default `5/minute`).
 
 ---
 
@@ -198,13 +229,13 @@ database name, username, password, host, and port in the URL are correct.
 
 ---
 
-### 4. Health Verification
+### 4. Verify It Works
 
 When both servers are running:
-1. Navigate to `http://localhost:5173` in your browser.
-2. The UI fetches `GET /health` from `http://localhost:8000/health`.
-3. If PostgreSQL is reachable, the backend executes `SELECT 1` and returns `200 OK` with database status `connected`.
-4. The dashboard displays green health badges and the raw JSON payload.
+1. Open `http://localhost:5173`.
+2. Click an example product (e.g. **Bamboo Keyboard**), then **⚡ Create My Listings**.
+3. The product profile, selling strategy, and Shopee / TikTok Shop / Lazada listings appear on the right, and the product is added to **Your Saved Products**.
+4. The **System Status** tab calls `GET /health`. If PostgreSQL is reachable, the backend runs `SELECT 1` and returns `200 OK` with database status `connected`.
 
 ---
 
@@ -228,5 +259,5 @@ The DevOps Engineer owns CI/CD and deployment. All other members are Developers.
 - [📋 Sprint Deliverables & Action Items](docs/SPRINT_DELIVERABLES.md): Full sprint breakdown (Sprints 1-4) with step-by-step assignments for each team member.
 - [🚀 Team Onboarding & Git Guide](docs/TEAM_ONBOARDING.md): Local environment setup, Git workflow, and branch rules.
 - [🔄 CI/CD Pipeline Guide](docs/PIPELINE.md): GitHub Actions automation, pip/npm caching, and Render/Vercel deployment.
+- [🏗️ System Architecture](docs/SYSTEM_ARCHITECTURE.md): How the three agents, validation layer, API, and database fit together.
 - [📖 DevOps Runbook](docs/runbook.md): Disaster recovery, troubleshooting, and deployment runbook.
-
