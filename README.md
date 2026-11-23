@@ -235,7 +235,7 @@ When both servers are running:
 1. Open `http://localhost:5173`.
 2. Click an example product (e.g. **Bamboo Keyboard**), then **⚡ Create My Listings**.
 3. The product profile, selling strategy, and Shopee / TikTok Shop / Lazada listings appear on the right, and the product is added to **Your Saved Products**.
-4. The **DevOps Health** tab calls `GET /health`. If PostgreSQL is reachable, the backend runs `SELECT 1` and returns `200 OK` with database status `connected`.
+4. The **System Status** tab calls `GET /health`. If PostgreSQL is reachable, the backend runs `SELECT 1` and returns `200 OK` with database status `connected`.
 
 ---
 

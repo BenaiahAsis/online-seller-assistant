@@ -3,6 +3,9 @@ import ListingPreview from './components/ListingPreview';
 import MarketStrategyCard from './components/MarketStrategyCard';
 import AgentLogsConsole from './components/AgentLogsConsole';
 
+// Keep in sync with ProductBase.features max_length in backend/app/schemas.py
+const FEATURES_MAX_LENGTH = 2000;
+
 const SAMPLE_PRODUCTS = [
   {
     icon: '⌨️',
@@ -748,7 +751,7 @@ export default function App() {
                     : 'bg-rose-500'
                 }`}
               />
-              <span>DevOps Health</span>
+              <span>System Status</span>
             </button>
           </nav>
         </div>
@@ -1062,6 +1065,8 @@ export default function App() {
                       <textarea
                         id="product-features"
                         rows={4}
+                        maxLength={FEATURES_MAX_LENGTH}
+                        aria-describedby="product-features-count"
                         placeholder="Paste unorganized bullet points, supplier specs, dimensions, battery life..."
                         value={formData.features}
                         onChange={(e) =>
@@ -1069,6 +1074,16 @@ export default function App() {
                         }
                         className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                       />
+                      <p
+                        id="product-features-count"
+                        className={`text-xs text-right ${
+                          formData.features.length >= FEATURES_MAX_LENGTH
+                            ? 'text-rose-700 font-semibold'
+                            : 'text-slate-500'
+                        }`}
+                      >
+                        {formData.features.length.toLocaleString()} / {FEATURES_MAX_LENGTH.toLocaleString()} characters
+                      </p>
                     </div>
 
                     {/* Dual Action Buttons */}

@@ -40,6 +40,7 @@ export default function ListingPreview({
   const [editTitle, setEditTitle] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
+  const [saveError, setSaveError] = useState(null);
 
   if (!product) return null;
 
@@ -52,12 +53,18 @@ export default function ListingPreview({
     if (!currentListing) return;
     setEditTitle(currentListing.title);
     setEditDesc(currentListing.description);
+    setSaveError(null);
     setIsEditing(true);
   };
 
   const handleSaveListing = async () => {
     if (!currentListing) return;
+    if (!editTitle.trim() || !editDesc.trim()) {
+      setSaveError('Title and description cannot be empty.');
+      return;
+    }
     setSavingEdit(true);
+    setSaveError(null);
     try {
       const res = await fetch(`${apiUrl}/api/listings/${currentListing.id}`, {
         method: 'PATCH',
@@ -73,9 +80,18 @@ export default function ListingPreview({
       if (res.ok) {
         setIsEditing(false);
         if (onListingUpdated) onListingUpdated();
+      } else {
+        const body = await res.json().catch(() => null);
+        const detail = Array.isArray(body?.detail)
+          ? body.detail.map((d) => d.msg).join('; ')
+          : body?.detail;
+        setSaveError(
+          `Your changes were not saved${detail ? `: ${detail}` : ` (HTTP ${res.status})`}. Try again.`
+        );
       }
     } catch (err) {
       console.error('Failed to update listing:', err);
+      setSaveError('Your changes were not saved: could not reach the server. Try again.');
     } finally {
       setSavingEdit(false);
     }
@@ -339,6 +355,8 @@ export default function ListingPreview({
             {isEditing ? (
               <textarea
                 rows={8}
+                maxLength={3000}
+                aria-label="Listing description"
                 value={editDesc}
                 onChange={(e) => setEditDesc(e.target.value)}
                 className="w-full bg-white border border-indigo-500 rounded-lg p-3 text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-sans leading-relaxed"
@@ -349,12 +367,21 @@ export default function ListingPreview({
               </pre>
             )}
 
+            {isEditing && saveError && (
+              <p
+                role="alert"
+                className="mt-2 text-xs text-rose-800 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2"
+              >
+                {saveError}
+              </p>
+            )}
+
             {isEditing && (
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setIsEditing(false)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:text-slate-900"
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900"
                 >
                   Cancel
                 </button>
@@ -362,7 +389,7 @@ export default function ListingPreview({
                   type="button"
                   onClick={handleSaveListing}
                   disabled={savingEdit}
-                  className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow"
+                  className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow disabled:opacity-50"
                 >
                   {savingEdit ? 'Saving...' : 'Save Customized Copy'}
                 </button>

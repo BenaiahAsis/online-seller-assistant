@@ -308,7 +308,7 @@ frontend/src/
 - A saved-products catalog with search and delete.
 - Per-platform listing tabs with copy buttons for the full listing, title, or description, and
   inline editing.
-- A **DevOps Health** tab that polls `/health` and shows a notice while the free-tier backend
+- A **System Status** tab that polls `/health` and shows a notice while the free-tier backend
   wakes up.
 
 ---
@@ -321,7 +321,7 @@ flowchart LR
     GH --> CI
     subgraph CI ["GitHub Actions (.github/workflows/ci.yml)"]
         LintPy["ruff check"]
-        TestPy["pytest (46 tests)"]
+        TestPy["pytest (48 tests)"]
         LintJS["npm run lint"]
         BuildJS["npm run build"]
     end

@@ -513,6 +513,18 @@ def test_update_product_listing_endpoint():
     assert updated["title"] == "Customized Handcrafted Cardholder"
 
 
+def test_update_listing_rejects_empty_or_oversized_title():
+    product_id = _create_product(name="Leather Cardholder", price=450.0)
+    gen_res = client.post(f"/api/products/{product_id}/generate-listings")
+    listing_id = gen_res.json()[0]["id"]
+
+    empty = client.patch(f"/api/listings/{listing_id}", json={"title": ""})
+    assert empty.status_code == 422
+
+    too_long = client.patch(f"/api/listings/{listing_id}", json={"title": "x" * 256})
+    assert too_long.status_code == 422
+
+
 # --------------------------------------------------------------------------
 # Sprint 4 Pipeline Quality Tests (Requirements a-e)
 # --------------------------------------------------------------------------

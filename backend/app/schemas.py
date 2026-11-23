@@ -14,7 +14,9 @@ class ProductBase(BaseModel):
         default=None, max_length=500, description="Fabric, metal, ingredients, etc."
     )
     features: str | None = Field(
-        default=None, description="Key features, dimensions, or seller notes"
+        default=None,
+        max_length=2000,
+        description="Key features, dimensions, or seller notes",
     )
 
 
@@ -53,11 +55,11 @@ class ProductListingResponse(BaseModel):
 
 
 class ListingUpdate(BaseModel):
-    title: str | None = None
-    description: str | None = None
-    bullet_points: list[str] | None = None
-    hashtags: list[str] | None = None
-    call_to_action: str | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, min_length=1, max_length=3000)
+    bullet_points: list[str] | None = Field(default=None, max_length=10)
+    hashtags: list[str] | None = Field(default=None, max_length=15)
+    call_to_action: str | None = Field(default=None, max_length=255)
 
 
 class ProductResponse(ProductBase):
