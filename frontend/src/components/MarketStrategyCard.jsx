@@ -31,16 +31,15 @@ export default function MarketStrategyCard({ product, onRunMarketAnalysis, isRun
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-              Agent 2 &bull; Market Strategist
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+              Agent 2
             </span>
-            <span className="text-xs text-slate-500">Competitive Intelligence</span>
           </div>
           <h3 className="text-lg font-bold text-slate-900 mt-1">
-            Market Positioning &amp; Channel Strategy
+            Selling Strategy
           </h3>
-          <p className="text-xs text-slate-500">
-            Price elasticity assessment, buyer hesitation resolution, and channel angles.
+          <p className="text-xs text-slate-600">
+            Where your price sits, what might make buyers hesitate, and how to pitch on each platform.
           </p>
         </div>
 
@@ -49,9 +48,9 @@ export default function MarketStrategyCard({ product, onRunMarketAnalysis, isRun
             type="button"
             onClick={() => onRunMarketAnalysis && onRunMarketAnalysis(product.id)}
             disabled={isRunning}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white shadow transition-all disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-amber-700 hover:bg-amber-800 text-white shadow transition-all disabled:opacity-50"
           >
-            {isRunning ? 'Analyzing Market...' : 'Run Agent 2 Analysis'}
+            {isRunning ? 'Planning strategy...' : 'Plan Selling Strategy'}
           </button>
         )}
       </div>
@@ -62,7 +61,7 @@ export default function MarketStrategyCard({ product, onRunMarketAnalysis, isRun
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="space-y-1">
               <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold block">
-                Regional Price Band Assessment
+                Price Level
               </span>
               <p className="text-xs sm:text-sm text-slate-800">
                 {priceRationale || 'Evaluated against Philippine e-commerce benchmarks.'}
@@ -83,7 +82,7 @@ export default function MarketStrategyCard({ product, onRunMarketAnalysis, isRun
           {priorityPoints.length > 0 && (
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
               <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold block">
-                Ranked Value Propositions (Persuasive Weight)
+                Top Selling Points (Strongest First)
               </span>
               <div className="space-y-2">
                 {priorityPoints.map((pt, idx) => (
@@ -119,7 +118,7 @@ export default function MarketStrategyCard({ product, onRunMarketAnalysis, isRun
           {buyerObjections.length > 0 && (
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
               <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold block">
-                Buyer Psychological Hesitations &amp; Resolution Angles
+                Buyer Concerns &amp; How to Answer Them
               </span>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                 {buyerObjections.map((item, idx) => (
@@ -127,12 +126,13 @@ export default function MarketStrategyCard({ product, onRunMarketAnalysis, isRun
                     key={idx}
                     className="p-3 rounded-lg bg-white border border-slate-200 space-y-1.5 text-xs"
                   >
-                    <div className="flex items-center gap-1.5 text-rose-700 font-semibold">
-                      <span>⚠️ Hesitation:</span>
-                      <span className="line-clamp-1">{item.objection}</span>
+                    <div className="text-rose-800 font-semibold leading-relaxed">
+                      <span aria-hidden="true">⚠️ </span>
+                      <span>Concern: </span>
+                      <span className="font-medium">{item.objection}</span>
                     </div>
                     <div className="text-slate-700 pl-4 border-l-2 border-indigo-300 leading-relaxed">
-                      <span className="text-indigo-700 font-medium">Resolution Angle: </span>
+                      <span className="text-indigo-700 font-medium">How to answer: </span>
                       {item.response}
                     </div>
                   </div>
@@ -146,18 +146,19 @@ export default function MarketStrategyCard({ product, onRunMarketAnalysis, isRun
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
               <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                 <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">
-                  Channel Marketing Angles
+                  How to Pitch on Each Platform
                 </span>
                 <div className="flex items-center gap-1.5">
                   {['shopee', 'tiktok', 'lazada'].map((plat) => (
                     <button
                       key={plat}
                       type="button"
+                      aria-pressed={activePlatformTab === plat}
                       onClick={() => setActivePlatformTab(plat)}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-semibold uppercase transition-all ${
+                      className={`px-2.5 py-1 rounded-md text-xs font-semibold uppercase transition-all ${
                         activePlatformTab === plat
-                          ? 'bg-amber-600 text-white shadow-sm'
-                          : 'text-slate-500 hover:text-slate-900 bg-white'
+                          ? 'bg-amber-700 text-white shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900 bg-white border border-slate-200'
                       }`}
                     >
                       {plat}
