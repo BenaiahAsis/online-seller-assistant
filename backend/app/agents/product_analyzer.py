@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
 from typing import Any
 
+from pydantic import BaseModel, Field
+
+from app.agents.validation import (
+    PLACEHOLDER_KEYS,
+    build_corpus,
+    call_agent,
+    events_to_reasons,
+    grounded,
+    skipped_event,
+)
 from app.config import settings
 
 MATERIAL_TERMS = {
@@ -421,8 +430,82 @@ def _derive_fallback_profile(
     }
 
 
-def run_product_analysis_agent(product_data: dict[str, Any]) -> dict[str, Any]:
-    """Execute Agent 1: Product Analysis Agent to organize raw product inputs."""
+# ===========================================================================
+# Output contract and validation (AI path)
+# ===========================================================================
+
+
+class ProductProfile(BaseModel):
+    category: str = Field(min_length=3, max_length=120)
+    target_audience: str = Field(min_length=5, max_length=255)
+    selling_points: list[str] = Field(min_length=1, max_length=5)
+    suggested_keywords: list[str] = Field(min_length=1, max_length=8)
+    raw_summary: str = Field(min_length=20, max_length=600)
+
+
+SYSTEM = (
+    "You are Agent 1, the Product Analysis Agent in an e-commerce assistant for "
+    "Southeast Asian marketplaces (Shopee, TikTok Shop, Lazada). Organize the "
+    "seller's raw details into a structured profile. Use only facts the seller "
+    "gave you; never add specifications, certifications, guarantees or claims. "
+    "Return JSON only."
+)
+
+CURRENCY = "₱"
+BANNED_KEYWORD_TERMS = MATERIAL_TERMS | FLUFF_TERMS
+
+
+def _make_checks(sources: list[str]):
+    def checks(profile: ProductProfile) -> list[str]:
+        problems = []
+        for i, point in enumerate(profile.selling_points):
+            if not grounded(point, sources):
+                problems.append(
+                    f"selling_points.{i} '{point[:60]}' is not grounded in the "
+                    "seller's details"
+                )
+        for i, keyword in enumerate(profile.suggested_keywords):
+            kw = keyword.strip().lower().lstrip("#")
+            if kw in BANNED_KEYWORD_TERMS:
+                problems.append(
+                    f"suggested_keywords.{i} '{keyword}' is a raw material or "
+                    "filler word, not a search term"
+                )
+            elif not grounded(kw, sources, allow_general_terms=False):
+                problems.append(
+                    f"suggested_keywords.{i} '{keyword}' shares no word with "
+                    "the product name, materials or notes"
+                )
+        return problems
+
+    return checks
+
+
+def _client() -> Any | None:
+    key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not key or key in PLACEHOLDER_KEYS:
+        return None
+    from openai import OpenAI
+
+    base_url = settings.openai_base_url.strip() or None
+    return OpenAI(api_key=key, base_url=base_url)
+
+
+# ===========================================================================
+# Entry point
+# ===========================================================================
+
+
+def run_product_analysis_agent(
+    product_data: dict[str, Any],
+    client: Any | None = None,
+) -> dict[str, Any]:
+    """Execute Agent 1: structure raw seller input into a product profile.
+
+    The deterministic profile is always computed. When an AI client is
+    available, the model's profile must pass the shared schema, claims and
+    grounding gates (with one retry) before it replaces the deterministic one.
+    """
     name = product_data.get("name", "").strip()
     price = float(product_data.get("price", 0.0))
     quantity = int(product_data.get("quantity", 1))
@@ -430,83 +513,62 @@ def run_product_analysis_agent(product_data: dict[str, Any]) -> dict[str, Any]:
     features = product_data.get("features")
 
     fallback = _derive_fallback_profile(name, price, quantity, materials, features)
-    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    fallback["source"] = "heuristic"
 
-    if not api_key or api_key in {"not-set-yet", "mock", "placeholder"}:
+    client = client or _client()
+    if client is None:
+        fallback["fallback_reason"] = ["no OPENAI_API_KEY configured"]
+        fallback["validation_events"] = skipped_event("no OPENAI_API_KEY configured")
         return fallback
 
-    try:
-        from openai import OpenAI
+    sources = [name, str(materials or ""), str(features or "")]
+    corpus = build_corpus(name, materials, features)
+    prompt = (
+        "Analyze these seller details:\n"
+        f"- Name: {name}\n"
+        f"- Price: {CURRENCY}{price:,.2f}\n"
+        f"- Quantity: {quantity}\n"
+        f"- Materials: {materials or 'N/A'}\n"
+        f"- Features / notes: {features or 'N/A'}\n\n"
+        "RULES:\n"
+        "1. category: a specific retail category (e.g. 'Wearables & Smartwatches', "
+        "'Home & Living', 'Audio & Headphones'). Avoid 'General Merchandise' when "
+        "the product type is identifiable.\n"
+        "2. target_audience: specific to this product type.\n"
+        "3. selling_points: 1 to 5 points, each restating something the seller "
+        "actually listed. Soften unverified superlatives such as 'Most bought item' "
+        "to 'Popular choice among buyers'.\n"
+        "4. suggested_keywords: 1 to 8 search terms buyers type, each containing a "
+        "word from the product name, materials or notes. Never a standalone raw "
+        "material (zinc, iron, aluminum, glass) or filler word ('free', 'best').\n"
+        "5. raw_summary: one or two sentences using only the details above."
+    )
 
-        client = OpenAI(api_key=api_key)
-        prompt = (
-            "You are the Product Analysis Agent in an e-commerce assistant "
-            "for Southeast Asia (Shopee, TikTok, Lazada).\n"
-            "Analyze seller details and output a valid JSON object:\n"
-            f"- Name: {name}\n"
-            f"- Price: ₱{price:,.2f}\n"
-            f"- Quantity: {quantity}\n"
-            f"- Materials: {materials or 'N/A'}\n"
-            f"- Features: {features or 'N/A'}\n\n"
-            "RULES:\n"
-            "1. Infer a specific category (e.g. 'Wearables & Smartwatches', "
-            "'Home & Living', 'Audio & Headphones'). "
-            "Never use 'General Merchandise' when the product name is identifiable.\n"
-            "2. Target audience must be specific to the product type.\n"
-            "3. Suggested keywords must be actual search-intent terms buyers look up "
-            "(e.g. 'smartwatch for android', 'affordable smartwatch'). "
-            "NEVER include raw materials (e.g. zinc, iron, aluminum, glass) "
-            "or the word 'free' as standalone keywords.\n"
-            "4. Soften unverified superlatives like 'Most bought item' "
-            "to 'Popular choice among buyers'.\n\n"
-            "Output JSON with keys: category, target_audience, key_specifications, "
-            "selling_points, suggested_keywords, raw_summary"
-        )
+    profile, events = call_agent(
+        client=client,
+        model=settings.openai_model,
+        system=SYSTEM,
+        prompt=prompt,
+        schema_model=ProductProfile,
+        corpus=corpus,
+        temperature=0.2,
+        max_tokens=700,
+        checks=_make_checks(sources),
+    )
 
-        response = client.chat.completions.create(
-            model=settings.openai_model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a product analyst. Output raw JSON only.",
-                },
-                {"role": "user", "content": prompt},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.2,
-            max_tokens=700,
-        )
-
-        content = response.choices[0].message.content or "{}"
-        parsed = json.loads(content)
-
-        # Ensure raw materials and fluff are filtered from keywords
-        ai_keywords = parsed.get("suggested_keywords") or []
-        clean_keywords = [
-            k
-            for k in ai_keywords
-            if str(k).lower() not in MATERIAL_TERMS
-            and str(k).lower() not in FLUFF_TERMS
-        ]
-        if not clean_keywords:
-            clean_keywords = fallback["suggested_keywords"]
-
-        return {
-            "category": parsed.get("category") or fallback["category"],
-            "target_audience": (
-                parsed.get("target_audience") or fallback["target_audience"]
-            ),
-            "key_specifications": {
-                "listed_price": f"₱{price:,.2f}",
-                "available_stock": f"{quantity} units",
-                "material_composition": materials or "Standard manufactured grade",
-            },
-            "selling_points": (
-                parsed.get("selling_points") or fallback["selling_points"]
-            ),
-            "suggested_keywords": clean_keywords[:6],
-            "raw_summary": (parsed.get("raw_summary") or fallback["raw_summary"]),
-            "market_insights": fallback.get("market_insights"),
-        }
-    except Exception:
+    if profile is None:
+        fallback["fallback_reason"] = events_to_reasons(events)
+        fallback["validation_events"] = events
         return fallback
+
+    return {
+        "category": profile.category,
+        "target_audience": profile.target_audience,
+        "key_specifications": fallback["key_specifications"],
+        "selling_points": profile.selling_points,
+        "suggested_keywords": profile.suggested_keywords,
+        "raw_summary": profile.raw_summary,
+        "market_insights": fallback.get("market_insights"),
+        "source": "ai",
+        "validation_events": events,
+    }

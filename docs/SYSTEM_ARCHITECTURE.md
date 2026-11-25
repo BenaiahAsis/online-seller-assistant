@@ -25,7 +25,7 @@ quantity, materials, and free-form notes). The backend then runs a sequential th
 3. **Agent 3 — Listing Generator:** writes one ready-to-paste listing per platform (title,
    description, bullet points, hashtags, call to action).
 
-Agents 2 and 3 pass every AI response through a **validation layer** that rejects schema errors,
+All three agents pass every AI response through a **validation layer** that rejects schema errors,
 unsupported marketing claims, and text not grounded in the seller's input. When the AI is unavailable
 or its output is rejected, each agent falls back to a deterministic, rule-based result, so the
 pipeline always completes.
@@ -179,9 +179,16 @@ step runs it first.
 - **Rule-based profile:** keyword rules infer a specific category and target audience (for example,
   smartwatch terms → "Wearables & Smartwatches"). This profile is always computed and serves as the
   fallback.
-- **AI enhancement:** if `OPENAI_API_KEY` is set, the model returns a JSON profile (JSON mode).
-  Raw-material and filler words (zinc, iron, "free", "best", …) are removed from its keywords.
-- **Failure handling:** on any API or parsing error, the rule-based profile is used.
+- **AI profile:** if `OPENAI_API_KEY` is set, the model fills the Pydantic model `ProductProfile`
+  (category, target audience, 1–5 selling points, 1–8 keywords, summary) through the shared
+  validation layer ([Section 5](#5-validation-layer-backendappagentsvalidationpy)). Its grounding
+  checks require:
+  - every selling point to reuse words from the seller's name, materials, or notes
+  - every keyword to share a word with them
+  - no keyword to be a bare raw material or filler word (zinc, iron, "free", "best", …)
+- **Failure handling:** if the API errors or both attempts are rejected, the rule-based profile is
+  used. Key specifications (price, stock, materials) always come from the seller's input, never the
+  model.
 - **Extra output:** for thin input it adds follow-up questions for the seller, and it records
   unverified claims that were softened (for example, "Most bought item" → "Popular choice among
   buyers").
@@ -214,7 +221,7 @@ step runs it first.
 
 ## 5. Validation Layer (`backend/app/agents/validation.py`)
 
-Agents 2 and 3 call the model through `call_agent()`, which works as follows:
+All three agents call the model through `call_agent()`, which works as follows:
 
 1. **Strict structured output.** The Pydantic model is converted to a strict JSON schema
    (`strict_schema()`) and sent with `response_format={"type": "json_schema", "strict": true}`.
@@ -243,6 +250,25 @@ Every attempt is recorded as a validation event: accepted, rejected (with gates 
 api_error, or skipped. These events are written into `execution_logs`, so the frontend log console
 shows exactly why an output was accepted or replaced.
 
+### Simulating AI failures (demo aid)
+
+When the backend runs with `ALLOW_AI_FAILURE_SIMULATION=true`, the four agent endpoints accept an
+`X-Simulate-AI-Failure` header (exposed in Swagger). `backend/app/agents/simulation.py` then gives
+every agent a stand-in client instead of the real one:
+
+- `api_error`: every call raises a simulated provider outage.
+- `bad_output`: every call returns malformed JSON containing invented claims.
+
+The normal gates, retry, and fallback code then runs unchanged. The request still succeeds with
+rule-based output, and the logs show `API_ERROR` or `VALIDATE_REJECT` followed by the fallback.
+When the setting is off, the header is refused with `403`.
+
+### Choosing the AI provider
+
+The agents use the OpenAI Python SDK. `OPENAI_BASE_URL` can point them at any OpenAI-compatible
+endpoint. For example, GitHub Models (`https://models.github.ai/inference`) with
+`OPENAI_MODEL=openai/gpt-4o-mini` offers a free, rate-limited tier.
+
 ---
 
 ## 6. Execution Logs
@@ -270,6 +296,7 @@ All routes are defined in `backend/app/main.py`. Interactive documentation is av
 | `POST` | `/api/products` | Create a product (`ProductCreate`) |
 | `GET` | `/api/products` | List all products with analysis and listings |
 | `GET` | `/api/products/{id}` | Get one product |
+| `PATCH` | `/api/products/{id}` | Edit a product's name, price, stock, materials, or notes (only the fields sent). Existing analysis and listings are kept until regenerated |
 | `DELETE` | `/api/products/{id}` | Delete a product, its analysis, and its listings |
 | `POST` | `/api/products/{id}/analyze` | Run Agent 1 |
 | `POST` | `/api/products/{id}/market-analysis` | Run Agent 2 (runs Agent 1 first if needed) |
@@ -283,8 +310,15 @@ The generation and full-pipeline routes also accept hidden aliases kept for back
 `/api/products/{id}/generate-listing` and the same paths under `/api/v1/`. These aliases do not
 appear in the OpenAPI schema.
 
-**Errors.** Unhandled exceptions return a JSON `500` response. A custom middleware ensures CORS
-headers are still attached. Allowed origins come from `CORS_ORIGINS` (comma-separated), plus any
+**Errors.**
+- **Invalid input:** malformed or invalid requests get FastAPI's `422` response, with field-level
+  messages.
+- **Unknown IDs:** return `404`.
+- **Rate limit:** exceeding it returns `429`.
+- **Unhandled exceptions:** return a JSON `500` with a generic message. The exception text is
+  logged server-side, not returned. A custom middleware ensures CORS headers are still attached.
+
+CORS: Allowed origins come from `CORS_ORIGINS` (comma-separated), plus any
 `https://*.vercel.app` origin.
 
 ---
@@ -293,9 +327,10 @@ headers are still attached. Allowed origins come from `CORS_ORIGINS` (comma-sepa
 
 ```
 frontend/src/
-├── App.jsx                       # App state, API calls, layout: form, profile card, catalog, DevOps tab
+├── App.jsx                       # App state, API calls, layout: form, profile card, catalog, System Status tab
 ├── components/
 │   ├── AgentLogsConsole.jsx      # Collapsible log console with per-agent filters
+│   ├── ProductEditForm.jsx       # Edit a saved product's details (PATCH /api/products/{id})
 │   ├── MarketStrategyCard.jsx    # Agent 2 output: price level, selling points, buyer concerns, platform angles
 │   └── ListingPreview.jsx        # Agent 3 output: platform tabs, copy buttons, inline title/description editing
 ├── index.css                     # Tailwind directives
@@ -305,7 +340,7 @@ frontend/src/
 **Main features:**
 - One-click example products to fill the form.
 - A four-step progress indicator.
-- A saved-products catalog with search and delete.
+- A saved-products catalog with search and delete, plus **Edit Details** on the selected product.
 - Per-platform listing tabs with copy buttons for the full listing, title, or description, and
   inline editing.
 - A **System Status** tab that polls `/health` and shows a notice while the free-tier backend
@@ -321,7 +356,7 @@ flowchart LR
     GH --> CI
     subgraph CI ["GitHub Actions (.github/workflows/ci.yml)"]
         LintPy["ruff check"]
-        TestPy["pytest (48 tests)"]
+        TestPy["pytest (59 tests)"]
         LintJS["npm run lint"]
         BuildJS["npm run build"]
     end
@@ -340,7 +375,8 @@ flowchart LR
   `DATABASE_URL`, `JWT_SECRET`, and `CORS_ORIGINS` are set in the Render dashboard.
 - **Frontend deploy:** Vercel builds the `frontend/` app with `vite build`. Its settings are kept in
   the Vercel dashboard, not in this repository.
-- **Tests never call OpenAI.** The test suite uses in-memory SQLite and stubs the OpenAI client.
+- **Tests never call OpenAI.** The test suite uses in-memory SQLite, scripted fake clients, and a
+  `conftest.py` fixture that removes any real `OPENAI_API_KEY` from the environment.
 
 ---
 

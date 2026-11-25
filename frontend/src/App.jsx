@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import ListingPreview from './components/ListingPreview';
 import MarketStrategyCard from './components/MarketStrategyCard';
 import AgentLogsConsole from './components/AgentLogsConsole';
+import ProductEditForm from './components/ProductEditForm';
 
 // Keep in sync with ProductBase.features max_length in backend/app/schemas.py
 const FEATURES_MAX_LENGTH = 2000;
@@ -76,6 +77,7 @@ export default function App() {
   const [selectedPlatform, setSelectedPlatform] = useState('shopee'); // 'shopee' | 'tiktok' | 'lazada'
   const [copied, setCopied] = useState(false);
   const [catalogSearch, setCatalogSearch] = useState('');
+  const [editingProductId, setEditingProductId] = useState(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -182,8 +184,22 @@ export default function App() {
     }
   }, [productsEndpoint]);
 
+  // Apply a saved product edit everywhere it is shown
+  const handleProductSaved = useCallback((updated) => {
+    setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    setSelectedProduct((current) => (current?.id === updated.id ? updated : current));
+    setEditingProductId(null);
+    setNotification({
+      type: 'success',
+      message: updated.analysis
+        ? 'Details saved. Click "Regenerate Listings" so the profile and listings use the new details.'
+        : 'Details saved.',
+    });
+  }, []);
+
   // Select a product from the catalog and bring its results into view
   const handleSelectFromCatalog = useCallback((product) => {
+    setEditingProductId(null);
     setSelectedProduct(product);
     requestAnimationFrame(() => {
       resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1192,6 +1208,15 @@ export default function App() {
                   {selectedProduct ? (
                     <div className="space-y-4">
                       {/* Product Header */}
+                      {editingProductId === selectedProduct.id ? (
+                        <ProductEditForm
+                          key={selectedProduct.id}
+                          product={selectedProduct}
+                          apiUrl={apiUrl}
+                          onSaved={handleProductSaved}
+                          onCancel={() => setEditingProductId(null)}
+                        />
+                      ) : (
                       <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div>
                           <span className="text-xs text-slate-500 font-mono">
@@ -1220,6 +1245,14 @@ export default function App() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <button
                             type="button"
+                            onClick={() => setEditingProductId(selectedProduct.id)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 transition-all"
+                          >
+                            ✏️ Edit Details
+                          </button>
+
+                          <button
+                            type="button"
                             onClick={() => handleRunFullPipeline(selectedProduct.id)}
                             disabled={runningPipelineId === selectedProduct.id}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow transition-all disabled:opacity-50"
@@ -1241,6 +1274,7 @@ export default function App() {
                           </button>
                         </div>
                       </div>
+                      )}
 
                       {/* Structured Analysis Content */}
                       {selectedProduct.analysis ? (

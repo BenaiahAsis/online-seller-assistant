@@ -94,6 +94,8 @@ def test_global_exception_handler_preserves_cors():
     assert response.status_code == 500
     data = response.json()
     assert "error" in data
+    # Internal exception text (here: the missing DATABASE_URL) is logged, not returned
+    assert "DATABASE_URL" not in data["detail"]
     assert response.headers.get("access-control-allow-origin") == (
         "https://online-seller-assistant-three.vercel.app"
     )

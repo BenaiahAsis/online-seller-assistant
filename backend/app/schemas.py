@@ -24,6 +24,16 @@ class ProductCreate(ProductBase):
     pass
 
 
+class ProductUpdate(BaseModel):
+    """Partial update of a product's seller-supplied details."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    price: float | None = Field(default=None, gt=0)
+    quantity: int | None = Field(default=None, ge=1)
+    materials: str | None = Field(default=None, max_length=500)
+    features: str | None = Field(default=None, max_length=2000)
+
+
 class ProductAnalysisResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

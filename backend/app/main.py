@@ -3,7 +3,7 @@ import os
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
@@ -19,6 +19,7 @@ from app.agents import (
     run_market_analyzer_agent,
     run_product_analysis_agent,
 )
+from app.agents.simulation import SIMULATION_MODES, SimulatedFailureClient
 from app.config import settings
 from app.database import check_database_connection, get_db, init_db
 from app.limiter import limiter
@@ -30,9 +31,39 @@ from app.schemas import (
     ProductListingResponse,
     ProductListResponse,
     ProductResponse,
+    ProductUpdate,
 )
 
 logger = logging.getLogger("uvicorn.error")
+
+SimulateHeader = Annotated[
+    str | None,
+    Header(
+        description=(
+            "Demo aid, honoured only when ALLOW_AI_FAILURE_SIMULATION=true: "
+            "'api_error' simulates an AI provider outage, 'bad_output' returns "
+            "malformed model output."
+        ),
+    ),
+]
+
+
+def _simulation_client(mode: str | None) -> SimulatedFailureClient | None:
+    """Return a failing stand-in client when a simulation is requested."""
+    if not mode:
+        return None
+    mode = mode.strip().lower()
+    if not settings.allow_ai_failure_simulation:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="AI failure simulation is disabled on this server.",
+        )
+    if mode not in SIMULATION_MODES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"X-Simulate-AI-Failure must be one of {list(SIMULATION_MODES)}.",
+        )
+    return SimulatedFailureClient(mode)
 
 
 @asynccontextmanager
@@ -85,7 +116,9 @@ async def catch_exceptions_middleware(request: Request, call_next):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={
                 "error": "Internal Server Error",
-                "detail": str(exc),
+                "detail": (
+                    "Something went wrong on the server. The error has been logged."
+                ),
                 "type": type(exc).__name__,
             },
         )
@@ -116,7 +149,9 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
             "error": "Internal Server Error",
-            "detail": str(exc),
+            "detail": (
+                "Something went wrong on the server. The error has been logged."
+            ),
             "type": type(exc).__name__,
         },
     )
@@ -225,6 +260,52 @@ def get_product(product_id: int, db: Annotated[Session, Depends(get_db)]):
     return product
 
 
+@app.patch(
+    "/api/products/{product_id}",
+    response_model=ProductResponse,
+    tags=["Products"],
+)
+def update_product(
+    product_id: int,
+    payload: ProductUpdate,
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Update a product's details. Only the fields sent are changed.
+
+    Existing analysis and listings are kept; the client should offer to
+    regenerate them so they reflect the new details.
+    """
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Product with ID {product_id} not found.",
+        )
+
+    changes = payload.model_dump(exclude_unset=True)
+    for field in ("name", "price", "quantity"):
+        if field in changes and changes[field] is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"'{field}' cannot be null.",
+            )
+    for field, value in changes.items():
+        if isinstance(value, str):
+            value = value.strip()
+            if field in ("materials", "features") and not value:
+                value = None
+            if field == "name" and not value:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="'name' cannot be blank.",
+                )
+        setattr(product, field, value)
+
+    db.commit()
+    db.refresh(product)
+    return product
+
+
 @app.delete(
     "/api/products/{product_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -247,7 +328,11 @@ def delete_product(product_id: int, db: Annotated[Session, Depends(get_db)]):
     response_model=ProductResponse,
     tags=["Agents"],
 )
-def trigger_product_analysis(product_id: int, db: Annotated[Session, Depends(get_db)]):
+def trigger_product_analysis(
+    product_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    x_simulate_ai_failure: SimulateHeader = None,
+):
     """Run Agent 1 (Product Analysis Agent) to structure raw product inputs."""
     product = db.get(Product, product_id)
     if not product:
@@ -263,11 +348,12 @@ def trigger_product_analysis(product_id: int, db: Annotated[Session, Depends(get
         "materials": product.materials,
         "features": product.features,
     }
-    analysis_result = run_product_analysis_agent(input_data)
+    analysis_result = run_product_analysis_agent(
+        input_data, client=_simulation_client(x_simulate_ai_failure)
+    )
     agent_1_logs = generate_agent_1_logs(
         input_data,
         analysis_result,
-        source="ai" if os.getenv("OPENAI_API_KEY") else "heuristic",
     )
 
     if product.analysis:
@@ -309,7 +395,11 @@ def trigger_product_analysis(product_id: int, db: Annotated[Session, Depends(get
     response_model=ProductResponse,
     tags=["Agents"],
 )
-def trigger_market_analysis(product_id: int, db: Annotated[Session, Depends(get_db)]):
+def trigger_market_analysis(
+    product_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    x_simulate_ai_failure: SimulateHeader = None,
+):
     """Run Agent 2 (Market Analysis Agent) using Agent 1's structured output."""
     product = db.get(Product, product_id)
     if not product:
@@ -320,7 +410,11 @@ def trigger_market_analysis(product_id: int, db: Annotated[Session, Depends(get_
 
     # Ensure Agent 1 has run first
     if not product.analysis:
-        trigger_product_analysis(product_id=product_id, db=db)
+        trigger_product_analysis(
+            product_id=product_id,
+            db=db,
+            x_simulate_ai_failure=x_simulate_ai_failure,
+        )
         db.refresh(product)
 
     product_data = {
@@ -340,7 +434,11 @@ def trigger_market_analysis(product_id: int, db: Annotated[Session, Depends(get_
         ),
     }
 
-    market_result = run_market_analyzer_agent(product_data, analysis_data)
+    market_result = run_market_analyzer_agent(
+        product_data,
+        analysis_data,
+        client=_simulation_client(x_simulate_ai_failure),
+    )
     agent_2_logs = generate_agent_2_logs(product_data, analysis_data, market_result)
 
     if product.analysis:
@@ -386,6 +484,7 @@ def trigger_listing_generation(
     request: Request,
     product_id: int,
     db: Annotated[Session, Depends(get_db)],
+    x_simulate_ai_failure: SimulateHeader = None,
 ):
     """Run Agent 3 to create Shopee, TikTok, and Lazada listings."""
     product = db.get(Product, product_id)
@@ -397,10 +496,18 @@ def trigger_listing_generation(
 
     # Ensure Agent 1 & Agent 2 have run
     if not product.analysis:
-        trigger_product_analysis(product_id=product_id, db=db)
+        trigger_product_analysis(
+            product_id=product_id,
+            db=db,
+            x_simulate_ai_failure=x_simulate_ai_failure,
+        )
         db.refresh(product)
     if not product.analysis.market_insights:
-        trigger_market_analysis(product_id=product_id, db=db)
+        trigger_market_analysis(
+            product_id=product_id,
+            db=db,
+            x_simulate_ai_failure=x_simulate_ai_failure,
+        )
         db.refresh(product)
 
     product_data = {
@@ -417,7 +524,10 @@ def trigger_listing_generation(
     market_data = product.analysis.market_insights or {}
 
     listings_result = run_listing_generator_agent(
-        product_data, analysis_data, market_data
+        product_data,
+        analysis_data,
+        market_data,
+        client=_simulation_client(x_simulate_ai_failure),
     )
     agent_3_logs = generate_agent_3_logs(product_data, listings_result)
 
@@ -471,6 +581,7 @@ def trigger_full_pipeline(
     request: Request,
     product_id: int,
     db: Annotated[Session, Depends(get_db)],
+    x_simulate_ai_failure: SimulateHeader = None,
 ):
     """Execute the full sequential 3-agent pipeline in a single automated flow."""
     product = db.get(Product, product_id)
@@ -481,13 +592,22 @@ def trigger_full_pipeline(
         )
 
     # Step 1: Agent 1 (Product Analyzer)
-    trigger_product_analysis(product_id=product_id, db=db)
+    trigger_product_analysis(
+        product_id=product_id, db=db, x_simulate_ai_failure=x_simulate_ai_failure
+    )
 
     # Step 2: Agent 2 (Market Analyzer)
-    trigger_market_analysis(product_id=product_id, db=db)
+    trigger_market_analysis(
+        product_id=product_id, db=db, x_simulate_ai_failure=x_simulate_ai_failure
+    )
 
     # Step 3: Agent 3 (Listing Generator)
-    trigger_listing_generation(request=request, product_id=product_id, db=db)
+    trigger_listing_generation(
+        request=request,
+        product_id=product_id,
+        db=db,
+        x_simulate_ai_failure=x_simulate_ai_failure,
+    )
 
     db.refresh(product)
     pipeline_logs = (product.analysis.execution_logs or []) if product.analysis else []
