@@ -106,7 +106,16 @@ def build_corpus(*parts: Any) -> str:
 
 
 def words(text: str) -> set[str]:
-    return {w for w in re.findall(r"[a-z0-9]+", text.lower()) if len(w) >= 4}
+    """Significant tokens: words of 4+ letters and numbers of 2+ digits.
+
+    Numbers count so that facts like "900 x 400 mm" or "150g" can be grounded
+    in the seller's own input instead of always being rejected.
+    """
+    return {
+        w
+        for w in re.findall(r"[a-z0-9]+", text.lower())
+        if len(w) >= 4 or (w.isdigit() and len(w) >= 2)
+    }
 
 
 COMMON_PRODUCT_TERMS = {

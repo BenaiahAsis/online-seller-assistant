@@ -1,0 +1,206 @@
+[
+  {
+    "id": "candle-clean",
+    "checks": {
+      "three_listings": true,
+      "no_new_claims": true,
+      "clean_hashtags": true,
+      "grounded_title": true
+    },
+    "passed": true,
+    "details": {
+      "claims": [],
+      "bad_tags": [],
+      "ungrounded_titles": []
+    },
+    "agents": {
+      "Agent 1": "first_try",
+      "Agent 2": "first_try",
+      "Agent 3": "first_try"
+    }
+  },
+  {
+    "id": "keyboard-clean",
+    "checks": {
+      "three_listings": true,
+      "no_new_claims": true,
+      "clean_hashtags": true,
+      "grounded_title": true
+    },
+    "passed": true,
+    "details": {
+      "claims": [],
+      "bad_tags": [],
+      "ungrounded_titles": []
+    },
+    "agents": {
+      "Agent 1": "first_try",
+      "Agent 2": "first_try",
+      "Agent 3": "first_try"
+    }
+  },
+  {
+    "id": "tumbler-claim-supported",
+    "checks": {
+      "three_listings": true,
+      "no_new_claims": true,
+      "clean_hashtags": true,
+      "grounded_title": true
+    },
+    "passed": true,
+    "details": {
+      "claims": [],
+      "bad_tags": [],
+      "ungrounded_titles": []
+    },
+    "agents": {
+      "Agent 1": "first_try",
+      "Agent 2": "first_try",
+      "Agent 3": "first_try"
+    }
+  },
+  {
+    "id": "smartwatch-hype",
+    "checks": {
+      "three_listings": true,
+      "no_new_claims": true,
+      "clean_hashtags": true,
+      "grounded_title": true
+    },
+    "passed": true,
+    "details": {
+      "claims": [],
+      "bad_tags": [],
+      "ungrounded_titles": []
+    },
+    "agents": {
+      "Agent 1": "first_try",
+      "Agent 2": "first_try",
+      "Agent 3": "recovered"
+    }
+  },
+  {
+    "id": "shirt-thin",
+    "checks": {
+      "three_listings": true,
+      "no_new_claims": true,
+      "clean_hashtags": true,
+      "grounded_title": true
+    },
+    "passed": true,
+    "details": {
+      "claims": [],
+      "bad_tags": [],
+      "ungrounded_titles": []
+    },
+    "agents": {
+      "Agent 1": "first_try",
+      "Agent 2": "recovered",
+      "Agent 3": "recovered"
+    }
+  },
+  {
+    "id": "cushion-clean",
+    "checks": {
+      "three_listings": true,
+      "no_new_claims": true,
+      "clean_hashtags": true,
+      "grounded_title": false
+    },
+    "passed": false,
+    "details": {
+      "claims": [],
+      "bad_tags": [],
+      "ungrounded_titles": [
+        "tiktok"
+      ]
+    },
+    "agents": {
+      "Agent 1": "first_try",
+      "Agent 2": "first_try",
+      "Agent 3": "recovered"
+    }
+  },
+  {
+    "id": "earbuds-premium",
+    "checks": {
+      "three_listings": true,
+      "no_new_claims": true,
+      "clean_hashtags": true,
+      "grounded_title": true
+    },
+    "passed": true,
+    "details": {
+      "claims": [],
+      "bad_tags": [],
+      "ungrounded_titles": []
+    },
+    "agents": {
+      "Agent 1": "first_try",
+      "Agent 2": "first_try",
+      "Agent 3": "first_try"
+    }
+  },
+  {
+    "id": "serum-health-risk",
+    "checks": {
+      "three_listings": true,
+      "no_new_claims": true,
+      "clean_hashtags": true,
+      "grounded_title": false
+    },
+    "passed": false,
+    "details": {
+      "claims": [],
+      "bad_tags": [],
+      "ungrounded_titles": [
+        "tiktok"
+      ]
+    },
+    "agents": {
+      "Agent 1": "recovered",
+      "Agent 2": "recovered",
+      "Agent 3": "first_try"
+    }
+  },
+  {
+    "id": "no-materials",
+    "checks": {
+      "three_listings": true,
+      "no_new_claims": true,
+      "clean_hashtags": true,
+      "grounded_title": true
+    },
+    "passed": true,
+    "details": {
+      "claims": [],
+      "bad_tags": [],
+      "ungrounded_titles": []
+    },
+    "agents": {
+      "Agent 1": "fallback",
+      "Agent 2": "fallback",
+      "Agent 3": "fallback"
+    }
+  },
+  {
+    "id": "motorcycle-high-price",
+    "checks": {
+      "three_listings": true,
+      "no_new_claims": true,
+      "clean_hashtags": true,
+      "grounded_title": true
+    },
+    "passed": true,
+    "details": {
+      "claims": [],
+      "bad_tags": [],
+      "ungrounded_titles": []
+    },
+    "agents": {
+      "Agent 1": "first_try",
+      "Agent 2": "first_try",
+      "Agent 3": "recovered"
+    }
+  }
+]
