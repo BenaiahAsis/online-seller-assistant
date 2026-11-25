@@ -17,7 +17,9 @@ This runbook outlines operational procedures for deploying, maintaining, and rec
      - `DATABASE_URL`
      - `JWT_SECRET`
      - `CORS_ORIGINS` (Vercel production URL, e.g., `https://<project-name>.vercel.app`)
-2. **Continuous Deployment [untested]**:
+     - Optional: `OPENAI_MODEL`, `OPENAI_BASE_URL` (for an OpenAI-compatible provider such as GitHub Models), and `ALLOW_AI_FAILURE_SIMULATION=true` (enables the `X-Simulate-AI-Failure` demo header)
+   - If `OPENAI_API_KEY` is missing, the app still works, but every listing comes from the rule-based fallback. The UI then shows "Template version (AI unavailable)".
+2. **Continuous Deployment** (verified when PR #14 was merged):
    - Pushes to the `main` branch trigger automatic build and deployment on Render.
    - Health check monitors `/health`.
 
@@ -28,8 +30,9 @@ This runbook outlines operational procedures for deploying, maintaining, and rec
    - Vercel automatically detects Vite framework preset (build command `npm run build`, output directory `dist`).
    - Add environment variable:
      - `VITE_API_URL` (URL of the deployed Render backend, e.g., `https://<service-name>.onrender.com`).
-2. **Continuous Deployment [untested]**:
+2. **Continuous Deployment** (verified when PR #14 was merged):
    - Pushes to `main` automatically trigger production deployments on Vercel.
+   - Every pull request gets a Vercel preview deployment, linked on the PR.
 
 ---
 
@@ -97,4 +100,5 @@ The Render free tier puts web services to sleep after 15 minutes of inactivity:
      "database": "connected"
    }
    ```
-4. **Pre-warm Frontend**: Open the Vercel frontend URL in an incognito window and confirm the status indicators turn green.
+4. **Pre-warm Frontend**: Open the Vercel frontend URL in an incognito window and confirm the **System Status** indicator turns green.
+5. **Confirm the AI is live**: Regenerate listings for one product. If the amber "Template version (AI unavailable)" badge appears, check `OPENAI_API_KEY` on Render before presenting.

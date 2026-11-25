@@ -121,9 +121,11 @@ automatically when started from `backend/`.
 - `VITE_API_URL`: Backend base URL used by the frontend (defaults to `http://localhost:8000`).
 - `JWT_SECRET`: Reserved for planned user authentication. Not used by the current code.
 
-Optional backend settings (not in `.env.example`):
+Optional backend settings:
 
-- `OPENAI_MODEL`: OpenAI model name (default `gpt-4o-mini`).
+- `OPENAI_MODEL`: Model name (default `gpt-4o-mini`).
+- `OPENAI_BASE_URL`: Use an OpenAI-compatible provider instead of api.openai.com. For example, set it to `https://models.github.ai/inference` with `OPENAI_MODEL=openai/gpt-4o-mini`, and put a GitHub token with the `models` permission in `OPENAI_API_KEY`. That combination runs GitHub Models' free tier. Leave it empty for OpenAI.
+- `ALLOW_AI_FAILURE_SIMULATION`: Set to `true` to let requests send `X-Simulate-AI-Failure: api_error` or `bad_output`. This simulates an AI outage or malformed AI output (see [Demo aids](#-demo-aids)). It defaults to `false`, and the header is refused with `403` when the setting is off.
 - `RATE_LIMIT_GENERATE_LISTING`: Rate limit for listing generation and the full pipeline (default `5/minute`).
 
 ---
@@ -132,7 +134,7 @@ Optional backend settings (not in `.env.example`):
 
 ### Prerequisites
 - **Node.js** (v18.x or higher) & **npm**
-- **Python** (v3.10 or higher)
+- **Python** (v3.11 or higher; CI uses 3.12)
 - **PostgreSQL** instance (local server or Docker container)
 
 ---
@@ -235,7 +237,27 @@ When both servers are running:
 1. Open `http://localhost:5173`.
 2. Click an example product (e.g. **Bamboo Keyboard**), then **⚡ Create My Listings**.
 3. The product profile, selling strategy, and Shopee / TikTok Shop / Lazada listings appear on the right, and the product is added to **Your Saved Products**.
-4. The **System Status** tab calls `GET /health`. If PostgreSQL is reachable, the backend runs `SELECT 1` and returns `200 OK` with database status `connected`.
+4. Click **✏️ Edit Details** on the product to change its price or notes, then **⚡ Regenerate Listings**. You can also delete it from the catalog's trash icon. Together these cover create, read, update and delete.
+5. The **System Status** tab calls `GET /health`. If PostgreSQL is reachable, the backend runs `SELECT 1` and returns `200 OK` with database status `connected`.
+
+---
+
+## 🎬 Demo Aids
+
+**Simulate an AI failure.** Set `ALLOW_AI_FAILURE_SIMULATION=true` on the backend. Then, in Swagger (`/docs`), open `POST /api/products/{product_id}/full-pipeline`, click **Try it out**, and set the `x-simulate-ai-failure` header to one of these values:
+
+- `api_error`: every model call raises a simulated provider outage.
+- `bad_output`: every model call returns malformed JSON full of invented claims ("FDA approved", "free shipping").
+
+The request still returns `200` with all three listings. Each agent's log shows the failed attempts (`API_ERROR` or `VALIDATE_REJECT`), the retry, and the switch to its rule-based fallback, so nothing invalid is stored.
+
+**Send a malformed request.** Each of these is rejected before any agent runs:
+
+```bash
+curl -X POST "$API/api/products" -H "Content-Type: application/json" -d '{"name": "", "price": -5}'   # 422 with field errors
+curl -X POST "$API/api/products" -H "Content-Type: application/json" -d '{not json'                   # 422 JSON decode error
+curl -X PATCH "$API/api/products/999999" -H "Content-Type: application/json" -d '{"price": 10}'        # 404
+```
 
 ---
 

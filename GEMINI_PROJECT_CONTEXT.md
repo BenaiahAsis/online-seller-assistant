@@ -104,7 +104,9 @@ market context appears in the UI and heuristics (for example, prices use the
 - Foreign keys cascade deletion from a product to its analysis and listings.
 - Product input validation requires a non-empty name of at most 255
   characters and a price greater than zero. Quantity defaults to 1 and must
-  be at least 1. Materials are optional and limited to 500 characters.
+  be at least 1. Materials are optional and limited to 500 characters;
+  features/notes are optional and limited to 2,000 characters. Listing edits
+  limit the title to 1-255 and the description to 1-3,000 characters.
 
 ## Agent workflow and safeguards
 
@@ -121,7 +123,7 @@ market context appears in the UI and heuristics (for example, prices use the
 - Agent 3 produces exactly one listing for each of `shopee`, `tiktok`, and
   `lazada`. Its output contract constrains title, description, bullet, hashtag,
   and call-to-action lengths/counts.
-- Agents 2 and 3 share validation utilities. Responses are parsed against
+- All three agents share validation utilities. Responses are parsed against
   Pydantic schemas and checked for unsupported claims and grounding in seller
   input or prior-agent output. The shared runner allows up to two attempts;
   deterministic fallbacks are used when AI is unavailable or output cannot
@@ -143,6 +145,8 @@ running.
 | `POST` | `/api/products` | Create a product in `draft` status. |
 | `GET` | `/api/products` | List products and their associated analysis/listings. |
 | `GET` | `/api/products/{product_id}` | Get one product and associated data. |
+| `PATCH` | `/api/products/{product_id}` | Update a product's details (only the fields sent). |
+| `DELETE` | `/api/products/{product_id}` | Delete a product with its analysis and listings. |
 | `POST` | `/api/products/{product_id}/analyze` | Run or refresh Agent 1; status becomes `analyzed`. |
 | `POST` | `/api/products/{product_id}/market-analysis` | Run Agent 2; ensures Agent 1 has run first. |
 | `POST` | `/api/products/{product_id}/generate-listings` | Run Agent 3; ensures prior analysis stages exist, replaces prior listings, and marks product `completed`. |
@@ -199,13 +203,12 @@ credentials so routine tests do not need PostgreSQL or bill a real model API.
 - `docs/SYSTEM_ARCHITECTURE.md` advertises a Vercel frontend, Render backend,
   Neon PostgreSQL, and public URLs. Treat these as documentation claims, not
   live-availability checks.
-- Several older docs describe planned or superseded functionality. In
-  particular, the current inspected backend has no JWT authentication routes
-  despite the README listing JWT authentication; no SSE/EventSource or
-  WebSocket streaming endpoint despite the architecture document describing
-  SSE; and no Instagram listing (the implemented platforms are Shopee,
-  TikTok, and Lazada). The ORM engine is synchronous, despite architecture
-  documentation describing async/sync database access.
+- `README.md` and `docs/SYSTEM_ARCHITECTURE.md` describe the implemented system.
+  Features that are planned but not built (JWT authentication, SSE streaming,
+  extra platforms such as Instagram) are listed there as future work.
+- `OPENAI_BASE_URL` can point the agents at an OpenAI-compatible provider, and
+  `ALLOW_AI_FAILURE_SIMULATION=true` enables an `X-Simulate-AI-Failure`
+  header (`api_error` or `bad_output`) for demonstrating graceful fallback.
 - `docs/SPRINT_DELIVERABLES.md` includes sprint task lists that may be stale
   relative to the code. Verify any "planned," "current sprint," or completion
   claim against the implementation and tests.

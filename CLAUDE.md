@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-Backend (FastAPI, Python 3.12 in CI, 3.10+ per README) — run from `backend/`:
+Backend (FastAPI, Python 3.11+; CI uses 3.12) — run from `backend/`:
 
 ```powershell
 python -m venv venv                      # venv lives at backend/venv (gitignored)
@@ -39,8 +39,8 @@ CI (`.github/workflows/ci.yml`) runs on push to `main` and on PRs: `ruff check .
 
 ## Testing notes
 
-- Tests use in-memory SQLite (`sqlite:///:memory:` with `StaticPool`) and override `get_db` per test module. Each module repeats this setup rather than sharing a `conftest.py`.
-- `test_agents.py` has an autouse `no_live_api` fixture that monkeypatches the OpenAI client, so the suite never makes billable calls. Keep new agent tests on that pattern.
+- Tests use in-memory SQLite (`sqlite:///:memory:` with `StaticPool`) and override `get_db` per test module. Each module repeats this database setup; `conftest.py` only handles environment variables.
+- `tests/conftest.py` removes `OPENAI_API_KEY`/`OPENAI_BASE_URL` for every test, so the suite never makes billable calls. Agent tests pass a scripted fake client via the agents' `client=` parameter (see `FakeClient` in `test_agents.py` and `test_agent1_and_simulation.py`).
 - `test_rate_limit.py` and `test_agents.py` reset `limiter` between tests. Rate-limit state leaks between tests otherwise.
 - Schema changes need a migration path: `init_db()` runs `create_all` and then hand-written `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for `product_analyses` (PostgreSQL) or a PRAGMA-style column check (SQLite). There is no Alembic.
 
@@ -52,16 +52,17 @@ CI (`.github/workflows/ci.yml`) runs on push to `main` and on PRs: `ruff check .
 - Data model (`app/models.py`): `Product` 1—1 `ProductAnalysis` and 1—N `ProductListing`, all with cascade delete. `ProductAnalysis` stores Agent 1 output plus `market_insights` (Agent 2) and `execution_logs` (JSON array shared by all three agents). `Product.status` moves `draft` → `analyzed` → `completed`.
 - Pipeline (`full-pipeline` in `main.py`) calls the three endpoint functions directly as Python functions, in order: Agent 1 → Agent 2 → Agent 3. Each step first runs its predecessor if the data is missing. Calling the functions directly rather than over HTTP means the rate-limit decorator still applies to the inner call.
 - Re-running an agent replaces only its own log entries. Each log entry carries an `agent` prefix (`"Agent 2 …"`, `"Agent 3 …"`), and the reruns filter on that prefix before appending. Keep that prefix convention if you add log lines.
-- Agent 1 (`agents/product_analyzer.py`) is the structuring step. It always builds a rule-based profile, and when a key is set it asks OpenAI in plain JSON mode. It does not use `call_agent` or the validation gates, and it falls back to the rule-based profile on any error.
-- Agents 2 and 3 share `agents/validation.py::call_agent`. It sends a strict JSON-schema chat completion (schema derived from the pydantic model via `strict_schema`, which strips unsupported keywords and forces `additionalProperties: false`), then applies three gates in order: pydantic schema, claim rules (regexes such as "waterproof" or "FDA" that must be supported by seller-provided text in the corpus), and agent-specific grounding checks. On rejection it retries once (`MAX_ATTEMPTS = 2`), feeding the violations back to the model. The per-attempt events are kept and rendered into the execution logs, so gate decisions are visible in the UI. A new guardrail belongs in these gates, not in the endpoint code.
+- Agent 1 (`agents/product_analyzer.py`) is the structuring step. It always builds a rule-based profile; when a client is available its `ProductProfile` output goes through `call_agent` like Agents 2 and 3, with grounding checks on selling points and keywords. Key specifications always come from the seller input.
+- All three agents share `agents/validation.py::call_agent`. It sends a strict JSON-schema chat completion (schema derived from the pydantic model via `strict_schema`, which strips unsupported keywords and forces `additionalProperties: false`), then applies three gates in order: pydantic schema, claim rules (regexes such as "waterproof" or "FDA" that must be supported by seller-provided text in the corpus), and agent-specific grounding checks. On rejection it retries once (`MAX_ATTEMPTS = 2`), feeding the violations back to the model. The per-attempt events are kept and rendered into the execution logs, so gate decisions are visible in the UI. A new guardrail belongs in these gates, not in the endpoint code.
 - Agent 3 (`agents/listing_generator.py`) must return exactly one listing per platform in `PLATFORMS = (shopee, tiktok, lazada)`. Its `ListingBundle` validator enforces this. Its prompt forbids new product facts, so only rephrasing of Agent 1 and 2 output is allowed.
 - Rate limiting: `limiter` (slowapi, keyed by client IP) applies only to the two generation endpoints (`generate-listings` and `full-pipeline`), with the limit from `RATE_LIMIT_GENERATE_LISTING` (default `5/minute`). Other routes are unlimited.
-- Error handling: a middleware and a global exception handler both return 500 JSON with `error`, `detail`, and `type`. Both let `HTTPException` and `RateLimitExceeded` through.
+- Error handling: a middleware and a global exception handler both return 500 JSON with `error`, a generic `detail`, and `type`; the exception text is only logged. Both let `HTTPException` and `RateLimitExceeded` through.
+- AI client selection: each agent's `_client()` builds `OpenAI(api_key, base_url=OPENAI_BASE_URL or None)`. The agent endpoints accept an `X-Simulate-AI-Failure: api_error|bad_output` header, honoured only when `ALLOW_AI_FAILURE_SIMULATION=true` (403 otherwise); it swaps in `agents/simulation.py::SimulatedFailureClient` so the real gate/retry/fallback path runs. Internal endpoint-to-endpoint calls must pass `x_simulate_ai_failure` through.
 
 ### Frontend: one large component
 
-- `frontend/src/App.jsx` (~1750 lines) holds all app state and the API calls. It has two tabs, `assistant` (product form, pipeline controls, results) and `devops` (polls `GET /health`). The API base is `VITE_API_URL`, defaulting to `http://localhost:8000`.
-- Presentational pieces live in `src/components/`: `ListingPreview`, `MarketStrategyCard`, and `AgentLogsConsole`. They receive data through props from `App.jsx`. The one exception is `ListingPreview`, which sends its own `PATCH /api/listings/{id}` when a listing is edited.
+- `frontend/src/App.jsx` (~1850 lines) holds all app state and the API calls. It has two tabs, `assistant` (product form, pipeline controls, results) and `devops` (polls `GET /health`). The API base is `VITE_API_URL`, defaulting to `http://localhost:8000`.
+- Presentational pieces live in `src/components/`: `ListingPreview`, `MarketStrategyCard`, `AgentLogsConsole`, and `ProductEditForm`. They receive data through props from `App.jsx`. The exceptions are `ListingPreview` (`PATCH /api/listings/{id}`) and `ProductEditForm` (`PATCH /api/products/{id}`), which send their own save requests.
 - `SAMPLE_PRODUCTS` at the top of `App.jsx` is demo seed data for the form. It is not fetched from the backend.
 
 ### Deployment

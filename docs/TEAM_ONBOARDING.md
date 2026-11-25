@@ -73,7 +73,11 @@ source venv/bin/activate
 # 3. Install required packages:
 pip install -r requirements.txt
 
-# 4. Start the FastAPI development server:
+# 4. Create your local config in the repo root (first time only),
+#    then open it and set DATABASE_URL (see README > Environment Variables):
+cp ../.env.example ../.env     # PowerShell: Copy-Item ..\.env.example ..\.env
+
+# 5. Start the FastAPI development server:
 uvicorn app.main:app --reload
 ```
 * **API Server:** Running at [http://localhost:8000](http://localhost:8000)
