@@ -89,6 +89,47 @@ def test_get_nonexistent_product():
     assert res.status_code == 404
 
 
+def test_update_product_changes_only_sent_fields():
+    """PATCH updates the given fields and leaves the rest untouched."""
+    created = client.post(
+        "/api/products",
+        json={
+            "name": "Canvas Tote",
+            "price": 150.0,
+            "quantity": 10,
+            "materials": "Cotton canvas",
+            "features": "Inner pocket",
+        },
+    ).json()
+
+    res = client.patch(
+        f"/api/products/{created['id']}",
+        json={"price": 175.5, "features": "  Inner pocket, zip top  "},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["price"] == 175.5
+    assert data["features"] == "Inner pocket, zip top"
+    assert data["name"] == "Canvas Tote"
+    assert data["materials"] == "Cotton canvas"
+
+    # Persisted, not just echoed back
+    assert client.get(f"/api/products/{created['id']}").json()["price"] == 175.5
+
+
+def test_update_product_validation_and_missing():
+    created = client.post(
+        "/api/products", json={"name": "Mug", "price": 99.0, "quantity": 3}
+    ).json()
+    pid = created["id"]
+
+    assert client.patch(f"/api/products/{pid}", json={"price": 0}).status_code == 422
+    assert client.patch(f"/api/products/{pid}", json={"name": ""}).status_code == 422
+    assert client.patch(f"/api/products/{pid}", json={"name": "   "}).status_code == 422
+    assert client.patch(f"/api/products/{pid}", json={"name": None}).status_code == 422
+    assert client.patch("/api/products/99999", json={"price": 5}).status_code == 404
+
+
 def test_create_product_rejects_oversized_features():
     """Features over 2000 characters are rejected before reaching the agents."""
     base = {"name": "Desk Organizer", "price": 199.0, "quantity": 5}

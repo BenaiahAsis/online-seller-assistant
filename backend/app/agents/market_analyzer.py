@@ -235,7 +235,8 @@ def _client() -> Any | None:
         return None
     from openai import OpenAI
 
-    return OpenAI(api_key=key)
+    base_url = settings.openai_base_url.strip() or None
+    return OpenAI(api_key=key, base_url=base_url)
 
 
 def run_market_analyzer_agent(

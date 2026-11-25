@@ -151,6 +151,17 @@ def render_validation_logs(
                 details={"rejected_attempts": rejected},
             )
         )
+    elif used_fallback and any(e.get("outcome") == "api_error" for e in events):
+        logs.append(
+            make_log(
+                agent_name,
+                "FALLBACK_USED",
+                "AI provider unavailable; deterministic fallback substituted so "
+                "the pipeline still completes",
+                level="WARN",
+                details={"reason": "api_error"},
+            )
+        )
 
     return logs
 
@@ -163,10 +174,11 @@ def render_validation_logs(
 def generate_agent_1_logs(
     product_data: dict[str, Any],
     analysis_result: dict[str, Any],
-    source: str = "ai",
+    source: str | None = None,
 ) -> list[dict[str, Any]]:
     """Produce detailed execution logs for Agent 1 (Product Analysis Agent)."""
     logs: list[dict[str, Any]] = []
+    source = source or analysis_result.get("source", "heuristic")
     agent_name = "Agent 1: Product Analyzer"
 
     name = product_data.get("name", "Product")
@@ -253,13 +265,21 @@ def generate_agent_1_logs(
         )
     )
 
-    # Step 7: Completion
+    # Step 7: Validation gates, as actually executed
+    logs.extend(
+        render_validation_logs(
+            agent_name,
+            analysis_result.get("validation_events"),
+            used_fallback=source != "ai",
+        )
+    )
+
+    # Step 8: Completion
     logs.append(
         make_log(
             agent_name,
             "COMPLETE",
-            f"Structured product profile created for '{name}' "
-            "(Agent 1 has no backend validation gate)",
+            f"Structured product profile created for '{name}' (Engine: {source})",
             level="SUCCESS",
         )
     )

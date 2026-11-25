@@ -30,6 +30,15 @@ class Settings(BaseSettings):
     # OpenAI / LLM Model configuration (Single central config setting)
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    # Optional OpenAI-compatible endpoint, e.g. GitHub Models
+    # (https://models.github.ai/inference). Empty means api.openai.com.
+    openai_base_url: str = os.getenv("OPENAI_BASE_URL", "")
+
+    # Demo/testing aid: when true, requests may send the
+    # X-Simulate-AI-Failure header to force an AI outage or bad output.
+    allow_ai_failure_simulation: bool = os.getenv(
+        "ALLOW_AI_FAILURE_SIMULATION", "false"
+    ).strip().lower() in {"1", "true", "yes"}
 
     # Rate Limiting
     rate_limit_generate_listing: str = os.getenv(
