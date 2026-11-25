@@ -1,0 +1,45 @@
+name: Post-deploy smoke test
+
+# Render and Vercel report each deploy back to GitHub as a deployment.
+# When a production deploy succeeds, verify the live service actually works.
+on:
+  deployment_status:
+
+jobs:
+  backend:
+    name: backend-smoke
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment.environment == 'main - online-seller-assistant-backend'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      API: https://online-seller-assistant-backend.onrender.com
+    steps:
+      - name: Health check (database reachable)
+        run: |
+          code=$(curl -s -o health.json -w '%{http_code}' --retry 5 --retry-delay 10 --retry-all-errors --max-time 90 "$API/health")
+          cat health.json; echo
+          test "$code" = "200"
+
+      - name: API responds and validates input
+        run: |
+          test "$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "$API/api/products")" = "200"
+          # A malformed request must be rejected with 422, not crash the server
+          test "$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 -X POST "$API/api/products" -H 'Content-Type: application/json' -d '{"name":"","price":-1}')" = "422"
+
+  frontend:
+    name: frontend-smoke
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment.environment == 'Production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Production page loads and serves the app bundle
+        env:
+          URL: ${{ github.event.deployment_status.environment_url }}
+        run: |
+          test -n "$URL"
+          curl -sf --max-time 60 "$URL" -o index.html
+          grep -q '/assets/index-' index.html
