@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     # Core Application Metadata
     app_name: str = "Online Seller Assistant API"
-    app_version: str = "2.0.0"
+    app_version: str = "1.0.0"
 
     # Database
     database_url: str = os.getenv("DATABASE_URL", "")
