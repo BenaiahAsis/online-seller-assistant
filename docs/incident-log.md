@@ -1,4 +1,14 @@
 # Incident Log
 
-| date | what happened | cause | fix | prevention |
-|---|---|---|---|---|
+Every broken build on `main` and every production problem, each with a short postmortem.
+
+| # | Date | What happened | Root cause | Fix | Prevention |
+|---|---|---|---|---|---|
+| 1 | 2026-10-11 | The first CI run on PR #3 (`chore/ci`) failed at the Ruff lint step. | Lint errors in the scaffolded backend that had never been run through Ruff locally. | Commit `10d4bed` "fix: resolve ruff lint errors in backend". The re-run passed, and the PR merged on 2026-10-12. The failure never reached `main`. | Lint is a required check on every PR. Onboarding tells developers to run `ruff check .` before pushing. |
+| 2 | 2026-11-23 → 11-26 | **Production AI never ran.** Every listing in production was the rule-based "Template version (AI unavailable)". No user-facing errors appeared, because the fallback worked. | `OPENAI_API_KEY` was empty on the Render service. A first attempt to set it saved the values into a Render **Environment Group** that wasn't linked to any service, so the backend never received them. | Detected by a live end-to-end check after PR #14: the agent logs showed `VALIDATE_SKIP: no OPENAI_API_KEY configured`. The variables were set directly on the backend service and redeployed. | Runbook step "Confirm the AI is live" before every demo. The post-deploy smoke test checks the deployed API, and the scheduled AI evaluation runs daily. |
+| 3 | 2026-11-26 | After switching to GitHub Models, every AI call failed with `AttributeError: 'str' object has no attribute 'choices'`. Agents fell back to templates. | The provider endpoint returned a response the OpenAI SDK didn't parse into a completion object (the GitHub Models token or endpoint configuration). The exact upstream reason was not confirmed. | Switched providers through configuration only (`OPENAI_BASE_URL`, `OPENAI_MODEL`, `OPENAI_API_KEY`), with no code change. Groq sign-up was unavailable, so Google Gemini was chosen. | The provider is pluggable via `OPENAI_BASE_URL`. The failure-simulation header lets the team rehearse this failure safely. |
+| 4 | 2026-11-26 | On Gemini, every AI call returned `NotFoundError: 404`. | `gemini-2.0-flash` and `gemini-2.5-flash` are deprecated and not available to new Google AI Studio projects. | Set `OPENAI_MODEL=gemini-3.5-flash-lite` on Render. A live check then showed all three agents validated (Agent 3 recovered after one rejected attempt). | Check the provider's model list before choosing a model ID. The daily scheduled evaluation detects a retired model within a day. |
+
+**Recovery times (detection → fixed in production):**
+- **Incident 1:** about 8 hours (overnight). Main was never affected.
+- **Incidents 2–4:** one continuous degradation from the 2026-11-23 detection to the 2026-11-26 fix. The service stayed up throughout and served template listings.

@@ -102,3 +102,24 @@ The Render free tier puts web services to sleep after 15 minutes of inactivity:
    ```
 4. **Pre-warm Frontend**: Open the Vercel frontend URL in an incognito window and confirm the **System Status** indicator turns green.
 5. **Confirm the AI is live**: Regenerate listings for one product. If the amber "Template version (AI unavailable)" badge appears, check `OPENAI_API_KEY` on Render before presenting.
+
+---
+
+## 5. Cutting a Release
+
+1. Merge the release PR into `main` after review. Render and Vercel deploy it automatically.
+2. Wait until both deploys are live and the **Post-deploy smoke test** workflow is green (GitHub → Actions).
+3. Tag the exact commit that is live in production, then push the tag:
+   ```bash
+   git checkout main && git pull
+   git tag -a v1.0.0 -m "v1.0.0"
+   git push origin v1.0.0
+   ```
+4. On GitHub, go to **Releases → Draft a new release**, choose the tag, and paste that version's section from `CHANGELOG.md`.
+5. **Rollback target:** the previous tag, or the previous deploy in the Render and Vercel dashboards (see section 2).
+
+## 6. Rehearsing a Rollback (do this once before Demo Day)
+
+1. **Render:** service → **Events** → find the deploy *before* the current one → **Rollback**. Wait for it to go live, then check that `/health` returns 200. Then roll forward again by redeploying the latest commit.
+2. **Vercel:** project → **Deployments** → previous Production deployment → **⋯ → Instant Rollback** (or **Promote to Production**). Open the site to confirm it changed, then promote the latest deployment again.
+3. Record the time each step took in `docs/metrics-log.md` (time to recover).
