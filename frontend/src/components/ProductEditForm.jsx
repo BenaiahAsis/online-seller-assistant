@@ -1,11 +1,8 @@
 import { useState } from 'react';
+import { Button, Notice, Spinner } from './ui';
+import { FEATURES_MAX_LENGTH } from '../lib/product';
 
-// Keep in sync with ProductUpdate in backend/app/schemas.py
-const FEATURES_MAX_LENGTH = 2000;
-
-const inputClass =
-  'w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500';
-
+// Edit a saved product's details (PATCH /api/products/{id}).
 export default function ProductEditForm({ product, apiUrl, onSaved, onCancel }) {
   const [form, setForm] = useState({
     name: product.name || '',
@@ -43,9 +40,7 @@ export default function ProductEditForm({ product, apiUrl, onSaved, onCancel }) 
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) {
-        const detail = Array.isArray(body?.detail)
-          ? body.detail.map((d) => d.msg).join('; ')
-          : body?.detail;
+        const detail = Array.isArray(body?.detail) ? body.detail.map((d) => d.msg).join('; ') : body?.detail;
         setError(`Changes not saved${detail ? `: ${detail}` : ` (HTTP ${res.status})`}.`);
         return;
       }
@@ -58,68 +53,50 @@ export default function ProductEditForm({ product, apiUrl, onSaved, onCancel }) 
   };
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      aria-label={`Edit details for ${product.name}`}
-      className="bg-white border border-indigo-300 rounded-xl p-4 space-y-3"
-    >
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold text-slate-900">Edit product details</h3>
-        <span className="text-xs text-slate-500 font-mono">ID #{product.id}</span>
-      </div>
+    <form onSubmit={handleSubmit} aria-label={`Edit details for ${product.name}`} className="space-y-4 rounded-lg border border-line bg-white p-5">
+      <h2 className="text-base font-semibold">Edit product details</h2>
 
-      <div className="space-y-1">
-        <label htmlFor="edit-name" className="text-xs font-semibold text-slate-700 block">
-          Product Title / Name <span className="text-rose-600">*</span>
+      <div>
+        <label htmlFor="edit-name" className="field-label">
+          Product name <span className="text-red-700">*</span>
         </label>
-        <input id="edit-name" type="text" maxLength={255} required value={form.name} onChange={update('name')} className={inputClass} />
+        <input id="edit-name" type="text" maxLength={255} required value={form.name} onChange={update('name')} className="field" />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <label htmlFor="edit-price" className="text-xs font-semibold text-slate-700 block">
-            Price (₱) <span className="text-rose-600">*</span>
+        <div>
+          <label htmlFor="edit-price" className="field-label">
+            Price (₱) <span className="text-red-700">*</span>
           </label>
-          <input id="edit-price" type="number" step="0.01" min="0.01" required value={form.price} onChange={update('price')} className={`${inputClass} font-mono`} />
+          <input id="edit-price" type="number" step="0.01" min="0.01" required value={form.price} onChange={update('price')} className="field tabular-nums" />
         </div>
-        <div className="space-y-1">
-          <label htmlFor="edit-quantity" className="text-xs font-semibold text-slate-700 block">
-            Stock Units
-          </label>
-          <input id="edit-quantity" type="number" min="1" step="1" value={form.quantity} onChange={update('quantity')} className={`${inputClass} font-mono`} />
+        <div>
+          <label htmlFor="edit-quantity" className="field-label">Stock</label>
+          <input id="edit-quantity" type="number" min="1" step="1" value={form.quantity} onChange={update('quantity')} className="field tabular-nums" />
         </div>
       </div>
 
-      <div className="space-y-1">
-        <label htmlFor="edit-materials" className="text-xs font-semibold text-slate-700 block">
-          Materials / Composition
-        </label>
-        <input id="edit-materials" type="text" maxLength={500} value={form.materials} onChange={update('materials')} className={inputClass} />
+      <div>
+        <label htmlFor="edit-materials" className="field-label">Materials</label>
+        <input id="edit-materials" type="text" maxLength={500} value={form.materials} onChange={update('materials')} className="field" />
       </div>
 
-      <div className="space-y-1">
-        <label htmlFor="edit-features" className="text-xs font-semibold text-slate-700 block">
-          Raw Features &amp; Unorganized Notes
-        </label>
-        <textarea id="edit-features" rows={4} maxLength={FEATURES_MAX_LENGTH} value={form.features} onChange={update('features')} className={inputClass} />
-        <p className="text-xs text-right text-slate-500">
-          {form.features.length.toLocaleString()} / {FEATURES_MAX_LENGTH.toLocaleString()} characters
+      <div>
+        <label htmlFor="edit-features" className="field-label">Notes from your supplier</label>
+        <textarea id="edit-features" rows={5} maxLength={FEATURES_MAX_LENGTH} value={form.features} onChange={update('features')} className="field leading-relaxed" />
+        <p className="mt-1 text-right text-xs tabular-nums text-muted">
+          {form.features.length.toLocaleString()} / {FEATURES_MAX_LENGTH.toLocaleString()}
         </p>
       </div>
 
-      {error && (
-        <p role="alert" className="text-xs text-rose-800 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
-          {error}
-        </p>
-      )}
+      {error && <Notice tone="error" role="alert">{error}</Notice>}
 
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onCancel} className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900">
-          Cancel
-        </button>
-        <button type="submit" disabled={saving} className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow disabled:opacity-50">
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
+        <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button type="submit" variant="primary" disabled={saving}>
+          {saving && <Spinner />}
+          {saving ? 'Saving…' : 'Save changes'}
+        </Button>
       </div>
     </form>
   );

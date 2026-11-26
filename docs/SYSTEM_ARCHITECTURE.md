@@ -327,20 +327,31 @@ CORS: Allowed origins come from `CORS_ORIGINS` (comma-separated), plus any
 
 ```
 frontend/src/
-├── App.jsx                       # App state, API calls, layout: form, profile card, catalog, System Status tab
+├── App.jsx                       # Layout: sidebar, new-product form, product workspace, status page
+├── hooks/useSellerAssistant.js   # All app state and API calls
+├── lib/product.js                # Platforms, status labels, price formatting, log stage names
+├── lib/samples.js                # Demo products for the "Try an example" buttons
 ├── components/
-│   ├── AgentLogsConsole.jsx      # Collapsible log console with per-agent filters
+│   ├── Sidebar.jsx               # Saved products with search and delete; System status link
+│   ├── ProductForm.jsx           # New product form (create listings, or analyze only)
+│   ├── EmptyListingPreview.jsx   # Outline of a listing shown before a product exists
+│   ├── ProductWorkspace.jsx      # Selected product: header, progress, Listings / Selling strategy / Product profile tabs
+│   ├── ListingPreview.jsx        # Agent 3 output: platform switch, copy buttons, inline title/description editing
+│   ├── MarketStrategyCard.jsx    # Agent 2 output: price level, what to highlight, buyer concerns, pitch by platform
+│   ├── ProductProfile.jsx        # Agent 1 output: notices, category, audience, key specs, selling points, keywords
+│   ├── AgentLogsConsole.jsx      # Collapsed activity log with per-stage filters
 │   ├── ProductEditForm.jsx       # Edit a saved product's details (PATCH /api/products/{id})
-│   ├── MarketStrategyCard.jsx    # Agent 2 output: price level, selling points, buyer concerns, platform angles
-│   └── ListingPreview.jsx        # Agent 3 output: platform tabs, copy buttons, inline title/description editing
-├── index.css                     # Tailwind directives
+│   ├── StatusPage.jsx            # Server and database health (GET /health)
+│   ├── Toast.jsx                 # Bottom-right messages
+│   └── ui.jsx, Icon.jsx          # Buttons, notices, labels, segmented control; inline icons
+├── index.css                     # Tailwind directives and form field styles
 └── main.jsx                      # React entry point
 ```
 
 **Main features:**
 - One-click example products to fill the form.
-- A four-step progress indicator.
-- A saved-products catalog with search and delete, plus **Edit Details** on the selected product.
+- A progress line while a product is being analyzed or listings are being written.
+- A saved-products catalog with search and delete, plus **Edit details** on the selected product.
 - Per-platform listing tabs with copy buttons for the full listing, title, or description, and
   inline editing.
 - A **System Status** tab that polls `/health` and shows a notice while the free-tier backend

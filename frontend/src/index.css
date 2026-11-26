@@ -7,14 +7,28 @@
 }
 
 @layer base {
+  body {
+    @apply bg-canvas text-ink antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+
   button:focus-visible,
   a:focus-visible,
   input:focus-visible,
   textarea:focus-visible,
   select:focus-visible,
   [tabindex]:focus-visible {
-    outline: 2px solid theme('colors.indigo.600');
+    outline: 2px solid theme('colors.accent.DEFAULT');
     outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .field {
+    @apply w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-ink placeholder:text-muted/70 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent;
+  }
+  .field-label {
+    @apply mb-1.5 block text-[13px] font-medium text-ink;
   }
 }
 

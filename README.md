@@ -74,11 +74,23 @@ online-seller-assistant/
 │   └── requirements.txt          # Python dependencies
 └── frontend/
     ├── src/
-    │   ├── App.jsx               # App state, API calls, form, product profile, catalog, DevOps tab
+    │   ├── App.jsx               # Layout: sidebar, new-product form, product workspace, status page
+    │   ├── hooks/
+    │   │   └── useSellerAssistant.js   # All app state and API calls
+    │   ├── lib/
+    │   │   ├── product.js              # Shared helpers: platforms, status labels, price formatting
+    │   │   └── samples.js              # Demo products for the "Try an example" buttons
     │   ├── components/
-    │   │   ├── AgentLogsConsole.jsx    # Collapsible agent activity log
+    │   │   ├── Sidebar.jsx             # Saved products, search, delete, status link
+    │   │   ├── ProductForm.jsx         # New product form
+    │   │   ├── ProductWorkspace.jsx    # Selected product: header and Listings / Strategy / Profile tabs
+    │   │   ├── ListingPreview.jsx      # Agent 3 output with copy and edit
     │   │   ├── MarketStrategyCard.jsx  # Agent 2 output
-    │   │   └── ListingPreview.jsx      # Agent 3 output with copy and edit
+    │   │   ├── ProductProfile.jsx      # Agent 1 output
+    │   │   ├── AgentLogsConsole.jsx    # Collapsible activity log
+    │   │   ├── ProductEditForm.jsx     # Edit a saved product's details
+    │   │   ├── StatusPage.jsx          # Server and database health
+    │   │   └── ui.jsx, Icon.jsx, Toast.jsx, EmptyListingPreview.jsx
     │   ├── main.jsx              # React DOM entrypoint
     │   └── index.css             # Tailwind directives
     ├── package.json              # Node dependencies & scripts
