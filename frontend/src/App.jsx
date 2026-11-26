@@ -713,46 +713,47 @@ export default function App() {
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans selection:bg-indigo-200">
       {/* Top Glassmorphic Navbar */}
       <header className="border-b border-slate-200 bg-white/90 backdrop-blur-md sticky top-0 z-30 shadow-sm ">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center font-black text-white shadow-sm ">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 min-h-16 py-2 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-xl bg-indigo-600 flex items-center justify-center font-black text-white shadow-sm" aria-hidden="true">
               ⚡
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-base sm:text-lg tracking-tight text-slate-900 leading-tight">
+                <span className="font-extrabold text-sm sm:text-lg tracking-tight text-slate-900 leading-tight truncate">
                   Online Seller Assistant
                 </span>
-                <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200">
-                  v3.0
+                <span className="hidden sm:inline text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200">
+                  v1.0
                 </span>
               </div>
-              <span className="text-xs text-slate-600">
+              <span className="hidden sm:block text-xs text-slate-600">
                 AI listing writer for Shopee, TikTok Shop &amp; Lazada
               </span>
             </div>
           </div>
 
           {/* Navigation Controls */}
-          <nav aria-label="Main" className="flex items-center gap-2">
+          <nav aria-label="Main" className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               type="button"
               aria-current={activeTab === 'assistant' ? 'page' : undefined}
               onClick={() => setActiveTab('assistant')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-2.5 sm:px-3.5 py-2 sm:py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
                 activeTab === 'assistant'
                   ? 'bg-indigo-600 text-white'
                   : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 border border-transparent hover:border-slate-300'
               }`}
             >
-              <span>🤖</span>
-              <span>AI Listing Studio</span>
+              <span aria-hidden="true">🤖</span>
+              <span className="hidden sm:inline">AI Listing Studio</span>
+              <span className="sm:hidden">Studio</span>
             </button>
             <button
               type="button"
               aria-current={activeTab === 'devops' ? 'page' : undefined}
               onClick={() => setActiveTab('devops')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-2.5 sm:px-3.5 py-2 sm:py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
                 activeTab === 'devops'
                   ? 'bg-indigo-600 text-white'
                   : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 border border-transparent hover:border-slate-300'
@@ -767,7 +768,8 @@ export default function App() {
                     : 'bg-rose-500'
                 }`}
               />
-              <span>System Status</span>
+              <span className="hidden sm:inline">System Status</span>
+              <span className="sm:hidden">Status</span>
             </button>
           </nav>
         </div>

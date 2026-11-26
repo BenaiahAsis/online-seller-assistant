@@ -1,6 +1,6 @@
 # Online Seller Assistant — System Architecture
 
-> **API version:** 2.0.0 (`backend/app/config.py`)
+> **Release:** v1.0.0 (see [CHANGELOG](../CHANGELOG.md); API version in `backend/app/config.py`)
 > **Status:** Deployed
 > **Live Web App:** [https://online-seller-assistant-three.vercel.app](https://online-seller-assistant-three.vercel.app)
 > **Live API (Render):** [https://online-seller-assistant-backend.onrender.com](https://online-seller-assistant-backend.onrender.com)
@@ -356,7 +356,7 @@ flowchart LR
     GH --> CI
     subgraph CI ["GitHub Actions (.github/workflows/ci.yml)"]
         LintPy["ruff check"]
-        TestPy["pytest (59 tests)"]
+        TestPy["pytest (61 tests)"]
         LintJS["npm run lint"]
         BuildJS["npm run build"]
     end

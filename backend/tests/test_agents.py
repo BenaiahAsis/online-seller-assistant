@@ -20,7 +20,7 @@ from app.agents.market_analyzer import (
     price_tier,
     run_market_analyzer_agent,
 )
-from app.agents.validation import scan_claims, unsupported_claims
+from app.agents.validation import grounded, scan_claims, unsupported_claims, words
 from app.database import get_db
 from app.limiter import limiter
 from app.main import app
@@ -409,6 +409,29 @@ def test_listing_agent_rejects_missing_platform():
     )
 
     assert all(item["source"] == "heuristic" for item in listings)
+
+
+def test_numeric_facts_can_be_grounded():
+    """Found by the eval set: '900 x 400 mm' was always rejected as ungrounded."""
+    assert {"900", "400"} <= words("900 x 400 mm")
+    assert grounded("900 x 400 mm", ["900 x 400 mm, stitched edges"])
+    assert not grounded("1200 x 600 mm", ["900 x 400 mm, stitched edges"])
+
+
+def test_listing_agent_retries_when_a_title_drops_the_product_name():
+    """Found by the eval set: TikTok titles sometimes omitted the product."""
+    payload = json.loads(valid_listing_payload())
+    payload["listings"][1]["title"] = "Unwind with cozy relaxation tonight!"
+    fake = FakeClient(json.dumps(payload), valid_listing_payload())
+
+    listings = run_listing_generator_agent(
+        PRODUCT, PROFILE, MARKET_CONTEXT, client=fake
+    )
+
+    assert fake.call_count == 2
+    events = listings[0]["validation_events"]
+    assert [e["outcome"] for e in events] == ["rejected", "accepted"]
+    assert any("must include the product name" in v for v in events[0]["violations"])
 
 
 # --------------------------------------------------------------------------

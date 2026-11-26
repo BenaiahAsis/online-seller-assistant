@@ -266,7 +266,9 @@ def _derive_fallback_listings(
 # ===========================================================================
 
 
-def _make_checks(sources: list[str], keywords: list[str], corpus: str = ""):
+def _make_checks(
+    sources: list[str], keywords: list[str], corpus: str = "", name: str = ""
+):
     # Agent 1's keywords are usually multi-word phrases ("lumbar support
     # cushion") while hashtags are shortened forms of them ("#lumbarsupport").
     # Grounding is therefore checked per word, not against the whole phrase.
@@ -281,9 +283,16 @@ def _make_checks(sources: list[str], keywords: list[str], corpus: str = ""):
         if str(k) and str(k).lower().strip() not in FORBIDDEN_TAG_WORDS
     }
 
+    name_words = words(name)
+
     def checks(bundle: ListingBundle) -> list[str]:
         problems = []
         for listing in bundle.listings:
+            if name_words and not (words(listing.title) & name_words):
+                problems.append(
+                    f"{listing.platform}.title must include the product name "
+                    f"('{name}'), got '{listing.title}'"
+                )
             combined_text = f"{listing.title} {listing.description}".lower()
             if (
                 "all details above come from" in combined_text
@@ -402,7 +411,7 @@ def run_listing_generator_agent(
         "STRICT PLATFORM INSTRUCTIONS:\n"
         "1. TITLES:\n"
         "   - Shopee: Keyword-rich search title under 120 chars.\n"
-        "   - TikTok: Short punchy hook.\n"
+        "   - TikTok: Short punchy hook that still names the product.\n"
         "   - Lazada: Clean trust title highlighting materials/features.\n"
         "   - NEVER use titles like '{name} - {category} specifications'.\n"
         "2. DESCRIPTIONS:\n"
@@ -428,7 +437,7 @@ def run_listing_generator_agent(
         corpus=corpus,
         temperature=0.6,
         max_tokens=3500,
-        checks=_make_checks(sources, keywords, corpus),
+        checks=_make_checks(sources, keywords, corpus, name),
     )
 
     if bundle is None:

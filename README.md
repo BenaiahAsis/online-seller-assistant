@@ -21,6 +21,8 @@ and edit the final listings.
 - **Live app:** https://online-seller-assistant-three.vercel.app
 - **API docs (Swagger):** https://online-seller-assistant-backend.onrender.com/docs
 - **Architecture:** [docs/SYSTEM_ARCHITECTURE.md](docs/SYSTEM_ARCHITECTURE.md)
+- **Release:** v1.0.0 — see [CHANGELOG.md](CHANGELOG.md)
+- **Technical handoff document:** *link to be added*
 
 > The backend runs on Render's free tier, so the first request after a period of
 > inactivity can take up to a minute while the server wakes up.
@@ -197,6 +199,11 @@ database name, username, password, host, and port in the URL are correct.
    pytest
    ```
 
+   Optional: add three sample products to your local database:
+   ```bash
+   python -m scripts.seed
+   ```
+
 6. Start the FastAPI development server:
    ```bash
    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
@@ -283,3 +290,7 @@ The DevOps Engineer owns CI/CD and deployment. All other members are Developers.
 - [🔄 CI/CD Pipeline Guide](docs/PIPELINE.md): GitHub Actions automation, pip/npm caching, and Render/Vercel deployment.
 - [🏗️ System Architecture](docs/SYSTEM_ARCHITECTURE.md): How the three agents, validation layer, API, and database fit together.
 - [📖 DevOps Runbook](docs/runbook.md): Disaster recovery, troubleshooting, and deployment runbook.
+- [📈 Pipeline Metrics Log](docs/metrics-log.md) · [⚡ Optimization Log](docs/optimization-log.md) · [🚨 Incident Log](docs/incident-log.md)
+- [🤖 AI Evaluation](backend/evals/README.md): the 10-case evaluation set, how to run it, and results.
+- [🔀 Scope Change Log](docs/SCOPE_CHANGES.md): what changed from the pitch and why.
+- [📝 Changelog](CHANGELOG.md): release notes for v1.0.0.

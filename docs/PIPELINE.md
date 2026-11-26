@@ -1,101 +1,92 @@
-# CI/CD Pipeline Documentation
+# CI/CD Pipeline
 
-This document describes the continuous integration pipeline for **Online Seller Assistant** as defined in `.github/workflows/ci.yml`.
+How code gets from a developer's branch to production for **Online Seller Assistant**. The pipeline lives in three GitHub Actions workflows in `.github/workflows/`. Deploys are done by Render (backend) and Vercel (frontend) on every merge to `main`.
 
----
+| Workflow | File | Trigger | Purpose |
+|---|---|---|---|
+| **CI** | `ci.yml` | every pull request; every push to `main` | Quality gate: secrets, lint, format, tests, build |
+| **Post-deploy smoke test** | `post-deploy.yml` | GitHub `deployment_status` events from Render and Vercel | Verify the live service after each successful production deploy |
+| **AI evaluation** | `ai-eval.yml` | PRs that change `backend/app/agents/**` or `backend/evals/**`; daily at 01:00 UTC; manual | Run the evaluation set against the PR's own code, and run a daily live check of the AI provider |
 
-## Current Baseline Pipeline
-
-### Triggers
-- **`pull_request`**: Runs on any pull request targeting the repository.
-- **`push` to `main`**: Runs on every merge or push to the `main` branch.
-
-### Execution Model
-The pipeline executes two parallel jobs on `ubuntu-latest` with a strict `10-minute` timeout per job.
+## Pipeline diagram
 
 ```mermaid
-flowchart TD
-    Trigger(["Trigger: push to main / pull_request"]) --> Backend["Job: backend"]
-    Trigger --> Frontend["Job: frontend"]
-
-    subgraph Backend_Job ["backend (Ubuntu Latest, Python 3.12)"]
-        B1["Check out repository"] --> B2["Set up Python 3.12"]
-        B2["Set up Python 3.12"] --> B3["Install dependencies (pip install)"]
-        B3["Install dependencies (pip install)"] --> B4["Run linter (ruff check .)"]
-        B4["Run linter (ruff check .)"] --> B5["Run tests (pytest)"]
+flowchart LR
+    Dev["Developer branch"] --> PR["Pull request"]
+    PR --> CI
+    subgraph CI ["CI (ci.yml), parallel jobs"]
+        direction TB
+        SS["secret-scan<br/>gitleaks, full history"]
+        BE["backend<br/>pip cache → ruff check → ruff format --check → pytest (LLM mocked)"]
+        FE["frontend<br/>npm cache → eslint → vite build"]
     end
-
-    subgraph Frontend_Job ["frontend (Ubuntu Latest, Node.js 20)"]
-        F1["Check out repository"] --> F2["Set up Node.js 20"]
-        F2["Set up Node.js 20"] --> F3["Install dependencies (npm ci)"]
-        F3["Install dependencies (npm ci)"] --> F4["Run linter (npm run lint)"]
-        F4["Run linter (npm run lint)"] --> F5["Run build (npm run build)"]
-    end
-
-    Backend --> Backend_Job
-    Frontend --> Frontend_Job
+    PR -->|"agent code changed"| EV["ai-eval<br/>this commit's backend + live model<br/>10-case evaluation set"]
+    PR --> PV["Vercel preview deploy<br/>(link on the PR)"]
+    CI --> Gate{"Required checks pass<br/>+ 1 approving review"}
+    Gate -->|merge| Main["main"]
+    Main --> R["Render deploy (backend)<br/>health check /health"]
+    Main --> V["Vercel production deploy (frontend)"]
+    R -->|deployment_status: success| SB["backend-smoke<br/>/health 200 · /api/products 200 · malformed POST → 422"]
+    V -->|deployment_status: success| SF["frontend-smoke<br/>page loads, bundle present"]
+    Cron["Daily 01:00 UTC"] --> EV
 ```
 
----
+## Quality gates
+Branch protection on `main`, as configured in GitHub on 2026-11-26:
+- **Pull request required:** no direct pushes. Every change lands through a pull request.
+- **Required review:** 1 approving review before merging.
+- **Required status check:** `backend`.
+- **Cancel outdated runs:** a new push to the same PR branch cancels the outdated CI run (`concurrency`, `cancel-in-progress`). Runs on `main` are never cancelled.
 
-### Existing Stages & Rationale
+**Still to tighten** (in Settings → Branches → `main`):
+- Add `frontend` and `secret-scan` as required status checks.
+- Enable "Dismiss stale approvals when new commits are pushed".
+- Enable "Do not allow bypassing the above settings", which currently lets administrators skip the rules.
 
-#### 1. `backend` Job
-- **Working Directory**: `backend`
-- **Runner Environment**: `ubuntu-latest`
-- **Python Version**: `3.12`
-- **Timeout**: 10 minutes
+## CI stages and why each exists
 
-| Stage | Command | Purpose / Rationale |
+### `secret-scan` job
+| Stage | Command | Why |
 |---|---|---|
-| **Check out repository** | `actions/checkout@v4` | Fetches the commit code into the GitHub Actions runner. |
-| **Set up Python 3.12** | `actions/setup-python@v5` | Configures the isolated Python 3.12 runtime environment. |
-| **Install dependencies** | `python -m pip install --upgrade pip`<br>`pip install -r requirements.txt` | Installs FastAPI, SQLAlchemy, Uvicorn, Ruff, Pytest, and related dependencies. pip downloads are cached by `actions/setup-python` (keyed on `requirements.txt`). |
-| **Run linter (Ruff)** | `ruff check .` | Fast static analysis enforcing code conventions, typing standards, and PEP 8 guidelines. |
-| **Run tests (Pytest)** | `pytest` | Runs the backend suite: health/CORS, product CRUD, all three agents' validation gates with scripted fake AI clients, AI failure simulation, and rate limits. It uses in-memory SQLite, and `tests/conftest.py` removes any OpenAI key, so it never calls external APIs. |
+| Checkout, full history | `actions/checkout@v4` with `fetch-depth: 0` | gitleaks needs every commit to prove no secret was *ever* committed, not just in the latest code. |
+| Secret scan | `gitleaks/gitleaks-action@v2` | Fails the PR if a key, token, or connection string shows up in any commit. It runs in parallel, so it adds no time to the critical path. |
 
-#### 2. `frontend` Job
-- **Working Directory**: `frontend`
-- **Runner Environment**: `ubuntu-latest`
-- **Node.js Version**: `20`
-- **Timeout**: 10 minutes
-
-| Stage | Command | Purpose / Rationale |
+### `backend` job (Python 3.12, 10-minute timeout)
+| Stage | Command | Why |
 |---|---|---|
-| **Check out repository** | `actions/checkout@v4` | Fetches the commit code into the GitHub Actions runner. |
-| **Set up Node.js 20** | `actions/setup-node@v4` | Configures the Node.js 20 LTS runtime environment. |
-| **Install dependencies** | `npm ci` | Clean, deterministic installation of packages matching `package-lock.json`. The npm cache is restored by `actions/setup-node` (keyed on `package-lock.json`). |
-| **Run linter (ESLint)** | `npm run lint` | Enforces JavaScript syntax standards and React hooks/refresh rules. |
-| **Run build (Vite)** | `npm run build` | Compiles JSX, validates Tailwind CSS processing, and packages production assets to verify build viability before merge. |
+| Set up Python with pip cache | `actions/setup-python@v5` (`cache: pip`) | Matches production (Render is pinned to 3.12.7). The cache avoids re-downloading packages. |
+| Install | `pip install -r requirements.txt` | Same dependency set as production. |
+| Lint | `ruff check .` | The cheapest check runs first, so it fails fast. |
+| Format check | `ruff format . --check` | Keeps diffs readable, enforced by the pipeline instead of by reviewers. |
+| Tests | `pytest` | 61 tests: product CRUD, validation, error handling, all three agents' gates with scripted fake AI clients, AI failure simulation, rate limits, health/CORS. In-memory SQLite. `tests/conftest.py` removes any real AI key, so CI costs $0 and doesn't depend on the AI provider being up. |
 
----
+### `frontend` job (Node 20, 10-minute timeout)
+| Stage | Command | Why |
+|---|---|---|
+| Set up Node with npm cache | `actions/setup-node@v4` (`cache: npm`) | Faster installs. |
+| Install | `npm ci` | Exact versions from `package-lock.json`. |
+| Lint | `npm run lint` | React hooks and code-quality rules. |
+| Build | `npm run build` | Catches broken imports or JSX before merge; the same build Vercel runs. |
 
 ## Deployment (CD)
+CI doesn't deploy. The hosting platforms deploy from GitHub with no manual steps:
 
-CI does not deploy; the hosting platforms deploy from GitHub:
+- **Backend, Render:** auto-deploys `main` using `render.yaml` (Blueprint).
+  - Render waits for `/health` to return 200 before switching traffic, so a release that can't reach the database isn't promoted.
+  - Secrets are set in Render's environment settings (`sync: false`), never in the repository.
+- **Frontend, Vercel:** deploys `main` to production. Every PR gets its own **preview** deployment, linked on the PR.
+- **After a deploy:** Render and Vercel report each deploy to GitHub, and `post-deploy.yml` smoke-tests the live service when a production deploy succeeds.
 
-- **Backend:** Render auto-deploys the `main` branch using `render.yaml`. `/health` is the health check, so a release that cannot reach the database is not promoted.
-- **Frontend:** Vercel deploys `main` to production and builds a preview deployment for every pull request. The preview link is posted on the PR.
-- **Merge → live:** merging a pull request into `main` triggers both deploys. This was verified when PR #14 was merged.
+Rollback: see [runbook.md](runbook.md#2-rollback). Releases are tagged (`v1.0.0`), with notes in [CHANGELOG.md](../CHANGELOG.md).
 
-Rollback steps are in [runbook.md](runbook.md#2-rollback).
+## AI-specific concerns
+| Concern | How it's handled |
+|---|---|
+| **Cost and flakiness** | Unit tests never call a live model (mocked clients plus `conftest.py`). Live calls happen only in `ai-eval.yml`. |
+| **Prompt changes are code changes** | `ai-eval.yml` runs the 10-case evaluation set (`backend/evals/`) against the PR's own backend whenever agent code changes. |
+| **Non-determinism** | The evaluation checks shape and safety (three platforms, no invented claims, clean hashtags, grounded titles), not exact wording. |
+| **Provider outages** | They never block deploys: CI is fully mocked, and the app falls back to rule-based output. The daily evaluation and the `X-Simulate-AI-Failure` header cover outage rehearsal. |
+| **Key hygiene** | CI uses separate repository secrets (`EVAL_OPENAI_API_KEY`, `EVAL_OPENAI_BASE_URL`, `EVAL_OPENAI_MODEL`) from production's Render secret. If the secret is missing, the evaluation job skips with a note instead of failing. |
 
----
-
-## Pipeline Enhancements
-
-### Done
-- **Dependency caching:** pip and npm caches in both jobs (Sprint 2).
-- **API tests:** endpoint tests for products, agents, listings, health, and rate limits (Sprint 2).
-- **Mocked OpenAI tests:** agent orchestration and validation are tested with scripted fake clients, never live OpenAI (Sprint 3).
-
-### Planned
-
-### Sprint 3
-- **Prompt Evaluation Run**: Automated evaluation workflow triggered whenever prompt template files are modified.
-- **Scheduled Live Smoke Test**: Periodic scheduled cron workflow checking live staging/production `/health` endpoints.
-- **Secret Scanning**: Automated credential and token leakage scanning on commits and PRs.
-
-### Sprint 4
-- **Tagged Release**: Automated release packaging triggered on semantic version tags.
-- **Rollback Test**: Automated validation procedures to confirm rollback integrity.
+## Metrics and history
+Weekly numbers are in [metrics-log.md](metrics-log.md), optimizations in [optimization-log.md](optimization-log.md), and incidents with postmortems in [incident-log.md](incident-log.md).

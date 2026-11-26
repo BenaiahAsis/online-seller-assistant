@@ -1,0 +1,112 @@
+[
+  {
+    "id": "candle-clean",
+    "why": "Well-described product; should pass first try",
+    "product": {
+      "name": "Lavender Soy Candle",
+      "price": 250,
+      "quantity": 40,
+      "materials": "soy wax, lavender essential oil, cotton wick",
+      "features": "150g, hand poured, 40-hour burn time"
+    }
+  },
+  {
+    "id": "keyboard-clean",
+    "why": "Electronics with clear specs",
+    "product": {
+      "name": "Eco-Friendly Bamboo Wireless Keyboard",
+      "price": 1299,
+      "quantity": 120,
+      "materials": "bamboo wood casing, recycled ABS keycaps",
+      "features": "Bluetooth 5.0 and 2.4GHz, 60-hour rechargeable USB-C battery, silent scissor-switch keys"
+    }
+  },
+  {
+    "id": "tumbler-claim-supported",
+    "why": "Seller states 'food-grade' and 'BPA-free', so those claims are allowed",
+    "product": {
+      "name": "Insulated Stainless Steel Tumbler",
+      "price": 450,
+      "quantity": 250,
+      "materials": "18/8 food-grade stainless steel, BPA-free silicone lid",
+      "features": "Keeps drinks hot 12h and cold 24h, leak-proof lid, 500ml"
+    }
+  },
+  {
+    "id": "smartwatch-hype",
+    "why": "Unverified hype ('Most bought item', 'free strap'); output must not invent claims",
+    "product": {
+      "name": "Smartwatch",
+      "price": 899,
+      "quantity": 30,
+      "materials": "aluminum, zinc iron, glass",
+      "features": "Free strap, Most bought item, heart rate monitor"
+    }
+  },
+  {
+    "id": "shirt-thin",
+    "why": "Thin input; agents must not pad it with invented facts",
+    "product": {
+      "name": "Oversized Cotton Shirt",
+      "price": 350,
+      "quantity": 50,
+      "materials": "cotton",
+      "features": "oversized fit"
+    }
+  },
+  {
+    "id": "cushion-clean",
+    "why": "Home product with several features",
+    "product": {
+      "name": "Memory Foam Lumbar Support Cushion",
+      "price": 699,
+      "quantity": 85,
+      "materials": "high-density memory foam, 3D mesh cover",
+      "features": "adjustable strap, removable washable cover, fits office chairs and car seats"
+    }
+  },
+  {
+    "id": "earbuds-premium",
+    "why": "Premium price tier",
+    "product": {
+      "name": "Wireless Noise Cancelling Earbuds",
+      "price": 3499,
+      "quantity": 40,
+      "materials": "ABS plastic, silicone tips",
+      "features": "Bluetooth 5.3, 30-hour battery with case, IPX5 water resistant"
+    }
+  },
+  {
+    "id": "serum-health-risk",
+    "why": "Beauty product; model may be tempted to add health/certification claims",
+    "product": {
+      "name": "Vitamin C Face Serum",
+      "price": 399,
+      "quantity": 60,
+      "materials": "vitamin C, hyaluronic acid",
+      "features": "30ml dropper bottle, lightweight, for daily use"
+    }
+  },
+  {
+    "id": "no-materials",
+    "why": "Materials missing; must still produce three grounded listings",
+    "product": {
+      "name": "Gaming Mouse Pad XL",
+      "price": 299,
+      "quantity": 100,
+      "materials": null,
+      "features": "900 x 400 mm, stitched edges, non-slip base"
+    }
+  },
+  {
+    "id": "motorcycle-high-price",
+    "why": "Very high price; output must not invent warranty or financing claims",
+    "product": {
+      "name": "Yamaha Aerox V4 Scooter",
+      "price": 100000,
+      "quantity": 1,
+      "materials": "dual disc brakes, dual shock suspension",
+      "features": "newest Aerox model from Yamaha"
+    }
+  }
+]
