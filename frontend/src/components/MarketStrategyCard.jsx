@@ -1,218 +1,136 @@
 import { useState } from 'react';
+import { Button, SectionHeading, SegmentedControl, Spinner } from './ui';
+import { PLATFORMS, PLATFORM_LABEL, PRICE_TIERS, tierIndex } from '../lib/product';
 
-export default function MarketStrategyCard({ product, onRunMarketAnalysis, isRunning = false }) {
-  const [activePlatformTab, setActivePlatformTab] = useState('shopee');
+// "Selling strategy" tab: Agent 2 output (product.analysis.market_insights).
+export default function MarketStrategyCard({ product, onRunMarketAnalysis, isRunning = false, busy }) {
+  const [platform, setPlatform] = useState('shopee');
 
-  if (!product) return null;
+  const insights = product.analysis?.market_insights;
+  const hasStrategy = Boolean(insights?.price_tier || insights?.platform_strategies);
 
-  const marketInsights = product.analysis?.market_insights;
-  const priceTier = marketInsights?.price_tier || 'Pending Evaluation';
-  const priceRationale = marketInsights?.price_rationale;
-  const priorityPoints = marketInsights?.priority_points || [];
-  const buyerObjections = marketInsights?.buyer_objections || [];
-  const strategies = marketInsights?.platform_strategies || {};
+  if (!hasStrategy) {
+    return (
+      <div className="rounded-lg border border-dashed border-line px-6 py-10 text-center">
+        <p className="text-sm font-medium">Not planned yet</p>
+        <p className="mt-1 text-[13px] text-muted">
+          Where your price sits, what makes buyers hesitate, and how to pitch on each platform.
+        </p>
+        <Button variant="primary" className="mt-4" onClick={() => onRunMarketAnalysis(product.id)} disabled={busy}>
+          {isRunning && <Spinner />}
+          {isRunning ? 'Planning…' : 'Plan selling strategy'}
+        </Button>
+      </div>
+    );
+  }
 
-  const getTierColor = (tier = '') => {
-    if (tier.includes('Budget')) {
-      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-    }
-    if (tier.includes('Mid-Tier')) {
-      return 'bg-indigo-50 text-indigo-700 border-indigo-200';
-    }
-    if (tier.includes('Premium')) {
-      return 'bg-amber-50 text-amber-700 border-amber-200';
-    }
-    return 'bg-slate-100 text-slate-700 border-slate-300';
-  };
+  const tier = tierIndex(insights.price_tier);
+  const priorityPoints = insights.priority_points || [];
+  const objections = insights.buyer_objections || [];
+  const strategies = insights.platform_strategies || {};
+  const strategy = strategies[platform];
+  const availablePlatforms = PLATFORMS.filter((p) => strategies[p.id]);
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-sm space-y-5">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-              Agent 2
-            </span>
+    <div className="space-y-8">
+      <section>
+        <SectionHeading>Price level</SectionHeading>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-6">
+          <div className="flex shrink-0 items-center gap-3" aria-label={`Price level: ${PRICE_TIERS[tier] || insights.price_tier}`}>
+            {PRICE_TIERS.map((label, i) => (
+              <div key={label} className="flex flex-col items-center gap-1">
+                <span className={`h-1.5 w-14 rounded-full ${i === tier ? 'bg-ink' : 'bg-stone-200'}`} />
+                <span className={`text-xs ${i === tier ? 'font-medium text-ink' : 'text-muted'}`}>{label}</span>
+              </div>
+            ))}
           </div>
-          <h3 className="text-lg font-bold text-slate-900 mt-1">
-            Selling Strategy
-          </h3>
-          <p className="text-xs text-slate-600">
-            Where your price sits, what might make buyers hesitate, and how to pitch on each platform.
-          </p>
+          {insights.price_rationale && <p className="text-sm leading-relaxed">{insights.price_rationale}</p>}
         </div>
+      </section>
 
-        {product.analysis && !marketInsights && (
-          <button
-            type="button"
-            onClick={() => onRunMarketAnalysis && onRunMarketAnalysis(product.id)}
-            disabled={isRunning}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-amber-700 hover:bg-amber-800 text-white shadow transition-all disabled:opacity-50"
-          >
-            {isRunning ? 'Planning strategy...' : 'Plan Selling Strategy'}
-          </button>
-        )}
-      </div>
-
-      {marketInsights ? (
-        <div className="space-y-4">
-          {/* Price Tier & Positioning Row */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="space-y-1">
-              <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold block">
-                Price Level
-              </span>
-              <p className="text-xs sm:text-sm text-slate-800">
-                {priceRationale || 'Evaluated against Philippine e-commerce benchmarks.'}
-              </p>
-            </div>
-            <div className="flex-shrink-0">
-              <span
-                className={`inline-block px-3 py-1 rounded-lg text-xs font-bold border ${getTierColor(
-                  priceTier
-                )}`}
-              >
-                🏷️ Tier: {priceTier}
-              </span>
-            </div>
-          </div>
-
-          {/* Priority Value Propositions */}
-          {priorityPoints.length > 0 && (
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
-              <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold block">
-                Top Selling Points (Strongest First)
-              </span>
-              <div className="space-y-2">
-                {priorityPoints.map((pt, idx) => (
-                  <div
-                    key={idx}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs"
-                  >
-                    <div className="flex items-center gap-2 text-slate-800">
-                      <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-[10px]">
-                        {idx + 1}
-                      </span>
-                      <span>{pt.point}</span>
-                    </div>
-                    {pt.platforms && (
-                      <div className="flex items-center gap-1">
-                        {pt.platforms.map((p, pIdx) => (
-                          <span
-                            key={pIdx}
-                            className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-700"
-                          >
-                            {p}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Buyer Hesitations & Counter-Angles */}
-          {buyerObjections.length > 0 && (
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
-              <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold block">
-                Buyer Concerns &amp; How to Answer Them
-              </span>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                {buyerObjections.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="p-3 rounded-lg bg-white border border-slate-200 space-y-1.5 text-xs"
-                  >
-                    <div className="text-rose-800 font-semibold leading-relaxed">
-                      <span aria-hidden="true">⚠️ </span>
-                      <span>Concern: </span>
-                      <span className="font-medium">{item.objection}</span>
-                    </div>
-                    <div className="text-slate-700 pl-4 border-l-2 border-indigo-300 leading-relaxed">
-                      <span className="text-indigo-700 font-medium">How to answer: </span>
-                      {item.response}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Channel Strategy Tabs (Shopee / TikTok / Lazada) */}
-          {Object.keys(strategies).length > 0 && (
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">
-                  How to Pitch on Each Platform
-                </span>
-                <div className="flex items-center gap-1.5">
-                  {['shopee', 'tiktok', 'lazada'].map((plat) => (
-                    <button
-                      key={plat}
-                      type="button"
-                      aria-pressed={activePlatformTab === plat}
-                      onClick={() => setActivePlatformTab(plat)}
-                      className={`px-2.5 py-1 rounded-md text-xs font-semibold uppercase transition-all ${
-                        activePlatformTab === plat
-                          ? 'bg-amber-700 text-white shadow-sm'
-                          : 'text-slate-600 hover:text-slate-900 bg-white border border-slate-200'
-                      }`}
-                    >
-                      {plat}
-                    </button>
-                  ))}
+      {priorityPoints.length > 0 && (
+        <section>
+          <SectionHeading>What to highlight</SectionHeading>
+          <ol className="divide-y divide-line border-y border-line">
+            {priorityPoints.map((pt, i) => (
+              <li key={i} className="flex flex-col gap-1.5 py-2.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                <div className="flex gap-3 text-sm">
+                  <span className="w-4 shrink-0 tabular-nums text-muted">{i + 1}</span>
+                  <span>{pt.point}</span>
                 </div>
-              </div>
-
-              {strategies[activePlatformTab] && (
-                <div className="space-y-2 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500">
-                      Core Focus:{' '}
-                      <strong className="text-slate-800">
-                        {strategies[activePlatformTab].focus}
-                      </strong>
-                    </span>
-                    <span className="text-slate-500">
-                      Tone:{' '}
-                      <strong className="text-amber-700 font-mono">
-                        {strategies[activePlatformTab].tone}
-                      </strong>
-                    </span>
+                {pt.platforms?.length > 0 && (
+                  <div className="flex shrink-0 gap-1 pl-7 sm:pl-0">
+                    {pt.platforms.map((p) => (
+                      <span key={p} className="rounded bg-stone-100 px-1.5 py-0.5 text-xs text-stone-700">
+                        {PLATFORM_LABEL[p?.toLowerCase()] || p}
+                      </span>
+                    ))}
                   </div>
-                  <p className="text-slate-700 bg-slate-50 p-2.5 rounded-lg border border-slate-200 leading-relaxed">
-                    {strategies[activePlatformTab].angle}
-                  </p>
-                  {strategies[activePlatformTab].keyword_emphasis && (
-                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                      <span className="text-[11px] text-slate-500">Emphasis Keywords:</span>
-                      {strategies[activePlatformTab].keyword_emphasis.map((kw, i) => (
-                        <span
-                          key={i}
-                          className="px-2 py-0.5 rounded text-[10px] font-mono bg-indigo-50 text-indigo-700 border border-indigo-200"
-                        >
-                          #{kw}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                )}
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
+      {objections.length > 0 && (
+        <section>
+          <SectionHeading>Buyer concerns</SectionHeading>
+          <div className="divide-y divide-line border-y border-line">
+            {objections.map((o, i) => (
+              <div key={i} className="grid gap-1 py-3 text-sm sm:grid-cols-2 sm:gap-6">
+                <p>
+                  <span className="block text-xs text-muted">Concern</span>
+                  {o.objection}
+                </p>
+                <p>
+                  <span className="block text-xs text-muted">How to answer</span>
+                  {o.response}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {availablePlatforms.length > 0 && (
+        <section>
+          <SectionHeading
+            action={<SegmentedControl label="Platform" options={availablePlatforms} value={platform} onChange={setPlatform} />}
+          >
+            Pitch by platform
+          </SectionHeading>
+          {strategy ? (
+            <dl className="mt-3 grid gap-x-8 gap-y-4 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-[13px] text-muted">Focus</dt>
+                <dd className="mt-0.5">{strategy.focus}</dd>
+              </div>
+              <div>
+                <dt className="text-[13px] text-muted">Tone</dt>
+                <dd className="mt-0.5">{strategy.tone}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-[13px] text-muted">Angle</dt>
+                <dd className="mt-0.5 leading-relaxed">{strategy.angle}</dd>
+              </div>
+              {strategy.keyword_emphasis?.length > 0 && (
+                <div className="sm:col-span-2">
+                  <dt className="text-[13px] text-muted">Keywords to emphasize</dt>
+                  <dd className="mt-1.5 flex flex-wrap gap-1.5">
+                    {strategy.keyword_emphasis.map((kw) => (
+                      <span key={kw} className="rounded border border-line bg-white px-2 py-0.5 text-[13px]">
+                        {kw}
+                      </span>
+                    ))}
+                  </dd>
                 </div>
               )}
-            </div>
+            </dl>
+          ) : (
+            <p className="mt-3 text-sm text-muted">No pitch for this platform.</p>
           )}
-        </div>
-      ) : (
-        <div className="text-center py-8 space-y-2 bg-slate-50 rounded-xl border border-slate-200 border-dashed">
-          <p className="text-xs text-slate-500">
-            Market intelligence has not been generated for this product yet.
-          </p>
-          <p className="text-[11px] text-slate-500">
-            Execute the Full Pipeline or trigger Agent 2 to evaluate pricing tier and buyer psychology.
-          </p>
-        </div>
+        </section>
       )}
     </div>
   );

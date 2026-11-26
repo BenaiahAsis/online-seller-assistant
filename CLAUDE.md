@@ -59,11 +59,14 @@ CI (`.github/workflows/ci.yml`) runs on push to `main` and on PRs: `ruff check .
 - Error handling: a middleware and a global exception handler both return 500 JSON with `error`, a generic `detail`, and `type`; the exception text is only logged. Both let `HTTPException` and `RateLimitExceeded` through.
 - AI client selection: each agent's `_client()` builds `OpenAI(api_key, base_url=OPENAI_BASE_URL or None)`. The agent endpoints accept an `X-Simulate-AI-Failure: api_error|bad_output` header, honoured only when `ALLOW_AI_FAILURE_SIMULATION=true` (403 otherwise); it swaps in `agents/simulation.py::SimulatedFailureClient` so the real gate/retry/fallback path runs. Internal endpoint-to-endpoint calls must pass `x_simulate_ai_failure` through.
 
-### Frontend: one large component
+### Frontend
 
-- `frontend/src/App.jsx` (~1850 lines) holds all app state and the API calls. It has two tabs, `assistant` (product form, pipeline controls, results) and `devops` (polls `GET /health`). The API base is `VITE_API_URL`, defaulting to `http://localhost:8000`.
-- Presentational pieces live in `src/components/`: `ListingPreview`, `MarketStrategyCard`, `AgentLogsConsole`, and `ProductEditForm`. They receive data through props from `App.jsx`. The exceptions are `ListingPreview` (`PATCH /api/listings/{id}`) and `ProductEditForm` (`PATCH /api/products/{id}`), which send their own save requests.
-- `SAMPLE_PRODUCTS` at the top of `App.jsx` is demo seed data for the form. It is not fetched from the backend.
+- `frontend/src/hooks/useSellerAssistant.js` holds all app state and the API calls. `App.jsx` only lays out the page: a sidebar of saved products, then either the new-product form (no product selected), the selected product's workspace, or the System status page. The API base is `VITE_API_URL`, defaulting to `http://localhost:8000`.
+- Components in `src/components/` receive data through props. The exceptions are `ListingPreview` (`PATCH /api/listings/{id}`) and `ProductEditForm` (`PATCH /api/products/{id}`), which send their own save requests.
+- `ProductWorkspace` shows the selected product in three tabs, Listings (default), Selling strategy and Product profile, rendered by `ListingPreview`, `MarketStrategyCard` and `ProductProfile`. It is mounted with `key={product.id}` so tabs reset per product.
+- `lib/product.js` has the shared helpers. `productStatus()` is the one source for the Draft / Analyzed / Listings ready label, and `logStage()` maps the `Agent 1/2/3` log prefixes to the stage names shown in the UI. Agent names are not shown to sellers.
+- Design tokens (`canvas`, `ink`, `muted`, `line`, `accent`) live in `tailwind.config.js`. The teal `accent` is reserved for the one primary action on a screen and the active tab. The font is Inter. Don't use emoji as icons; use `components/Icon.jsx`.
+- `lib/samples.js` is demo seed data for the form. It is not fetched from the backend.
 
 ### Deployment
 
