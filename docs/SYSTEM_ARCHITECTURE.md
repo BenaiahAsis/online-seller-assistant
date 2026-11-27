@@ -312,7 +312,7 @@ appear in the OpenAPI schema.
 
 **Errors.**
 - **Invalid input:** malformed or invalid requests get FastAPI's `422` response, with field-level
-  messages.
+  messages (finite price `> 0` and `<= 10,000,000`, stock `1–100,000`, and IDs `1–2,147,483,647`).
 - **Unknown IDs:** return `404`.
 - **Rate limit:** exceeding it returns `429`.
 - **Unhandled exceptions:** return a JSON `500` with a generic message. The exception text is
