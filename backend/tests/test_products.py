@@ -125,9 +125,42 @@ def test_update_product_validation_and_missing():
 
     assert client.patch(f"/api/products/{pid}", json={"price": 0}).status_code == 422
     assert client.patch(f"/api/products/{pid}", json={"name": ""}).status_code == 422
-    assert client.patch(f"/api/products/{pid}", json={"name": "   "}).status_code == 422
+    blank_res = client.patch(f"/api/products/{pid}", json={"name": "   "})
+    assert blank_res.status_code == 422
+    assert isinstance(blank_res.json()["detail"], list)
     assert client.patch(f"/api/products/{pid}", json={"name": None}).status_code == 422
     assert client.patch("/api/products/99999", json={"price": 5}).status_code == 404
+
+
+def test_create_product_rejects_infinite_and_oversized_numbers():
+    """Infinity/NaN and out-of-range prices or quantities return 422."""
+    inf_res = client.post(
+        "/api/products",
+        content='{"name": "x", "price": 1e999}',
+        headers={"Content-Type": "application/json"},
+    )
+    assert inf_res.status_code == 422
+
+    too_expensive = client.post(
+        "/api/products", json={"name": "x", "price": 10_000_001, "quantity": 1}
+    )
+    assert too_expensive.status_code == 422
+
+    too_much_stock = client.post(
+        "/api/products", json={"name": "x", "price": 100, "quantity": 100_001}
+    )
+    assert too_much_stock.status_code == 422
+
+    max_price = client.post(
+        "/api/products", json={"name": "x", "price": 10_000_000, "quantity": 1}
+    )
+    assert max_price.status_code == 201
+
+
+def test_get_product_rejects_out_of_range_id():
+    """Oversized or non-positive product IDs return 422, not 500."""
+    assert client.get("/api/products/99999999999999999999").status_code == 422
+    assert client.get("/api/products/0").status_code == 422
 
 
 def test_create_product_rejects_oversized_features():

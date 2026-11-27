@@ -1,9 +1,12 @@
 import logging
+import math
 import os
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Path, Request, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
@@ -21,7 +24,7 @@ from app.agents import (
 )
 from app.agents.simulation import SIMULATION_MODES, SimulatedFailureClient
 from app.config import settings
-from app.database import check_database_connection, get_db, init_db
+from app.database import check_database_connection, get_db, get_engine, init_db
 from app.limiter import limiter
 from app.models import Product, ProductAnalysis, ProductListing
 from app.schemas import (
@@ -35,6 +38,8 @@ from app.schemas import (
 )
 
 logger = logging.getLogger("uvicorn.error")
+
+EntityId = Annotated[int, Path(ge=1, le=2_147_483_647)]
 
 SimulateHeader = Annotated[
     str | None,
@@ -136,6 +141,25 @@ app.add_middleware(
 )
 
 
+def _sanitize_validation_errors(obj: Any) -> Any:
+    """Replace non-finite floats so validation errors serialize to JSON."""
+    if isinstance(obj, float) and not math.isfinite(obj):
+        return str(obj)
+    if isinstance(obj, list):
+        return [_sanitize_validation_errors(item) for item in obj]
+    if isinstance(obj, dict):
+        return {k: _sanitize_validation_errors(v) for k, v in obj.items()}
+    return obj
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": jsonable_encoder(_sanitize_validation_errors(exc.errors()))},
+    )
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Fallback exception handler for ASGI errors."""
@@ -168,14 +192,16 @@ def read_root():
 
 @app.get("/health")
 def health_check():
-    """Keep-alive friendly health check endpoint running SELECT 1 against PostgreSQL."""
+    """Keep-alive health check endpoint running SELECT 1 against the database."""
     db_status = check_database_connection()
 
     if db_status.get("connected"):
+        engine = get_engine()
+        db_name = engine.dialect.name if engine is not None else "database"
         return {
             "status": "healthy",
             "database": "connected",
-            "message": "Backend service and PostgreSQL database are healthy.",
+            "message": f"Backend service and {db_name} database are healthy.",
             "detail": db_status.get("detail"),
         }
 
@@ -241,7 +267,7 @@ def list_products(db: Annotated[Session, Depends(get_db)]):
     response_model=ProductResponse,
     tags=["Products"],
 )
-def get_product(product_id: int, db: Annotated[Session, Depends(get_db)]):
+def get_product(product_id: EntityId, db: Annotated[Session, Depends(get_db)]):
     """Retrieve a single product and its structured profile."""
     stmt = (
         select(Product)
@@ -266,7 +292,7 @@ def get_product(product_id: int, db: Annotated[Session, Depends(get_db)]):
     tags=["Products"],
 )
 def update_product(
-    product_id: int,
+    product_id: EntityId,
     payload: ProductUpdate,
     db: Annotated[Session, Depends(get_db)],
 ):
@@ -291,13 +317,21 @@ def update_product(
             )
     for field, value in changes.items():
         if isinstance(value, str):
+            raw_value = value
             value = value.strip()
             if field in ("materials", "features") and not value:
                 value = None
             if field == "name" and not value:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="'name' cannot be blank.",
+                    detail=[
+                        {
+                            "type": "string_too_short",
+                            "loc": ["body", "name"],
+                            "msg": "Name cannot be blank.",
+                            "input": raw_value,
+                        }
+                    ],
                 )
         setattr(product, field, value)
 
@@ -311,7 +345,7 @@ def update_product(
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["Products"],
 )
-def delete_product(product_id: int, db: Annotated[Session, Depends(get_db)]):
+def delete_product(product_id: EntityId, db: Annotated[Session, Depends(get_db)]):
     """Permanently delete a product and all its analyses and listings."""
     product = db.get(Product, product_id)
     if not product:
@@ -329,7 +363,7 @@ def delete_product(product_id: int, db: Annotated[Session, Depends(get_db)]):
     tags=["Agents"],
 )
 def trigger_product_analysis(
-    product_id: int,
+    product_id: EntityId,
     db: Annotated[Session, Depends(get_db)],
     x_simulate_ai_failure: SimulateHeader = None,
 ):
@@ -396,7 +430,7 @@ def trigger_product_analysis(
     tags=["Agents"],
 )
 def trigger_market_analysis(
-    product_id: int,
+    product_id: EntityId,
     db: Annotated[Session, Depends(get_db)],
     x_simulate_ai_failure: SimulateHeader = None,
 ):
@@ -482,7 +516,7 @@ def trigger_market_analysis(
 @limiter.limit(settings.rate_limit_generate_listing)
 def trigger_listing_generation(
     request: Request,
-    product_id: int,
+    product_id: EntityId,
     db: Annotated[Session, Depends(get_db)],
     x_simulate_ai_failure: SimulateHeader = None,
 ):
@@ -579,7 +613,7 @@ def trigger_listing_generation(
 @limiter.limit(settings.rate_limit_generate_listing)
 def trigger_full_pipeline(
     request: Request,
-    product_id: int,
+    product_id: EntityId,
     db: Annotated[Session, Depends(get_db)],
     x_simulate_ai_failure: SimulateHeader = None,
 ):
@@ -624,7 +658,7 @@ def trigger_full_pipeline(
     response_model=list[dict[str, Any]],
     tags=["Agents"],
 )
-def get_product_logs(product_id: int, db: Annotated[Session, Depends(get_db)]):
+def get_product_logs(product_id: EntityId, db: Annotated[Session, Depends(get_db)]):
     """Retrieve full audit and execution logs for all agents on a product."""
     product = db.get(Product, product_id)
     if not product:
@@ -641,7 +675,7 @@ def get_product_logs(product_id: int, db: Annotated[Session, Depends(get_db)]):
     tags=["Listings"],
 )
 def update_product_listing(
-    listing_id: int,
+    listing_id: EntityId,
     payload: ListingUpdate,
     db: Annotated[Session, Depends(get_db)],
 ):
@@ -673,7 +707,7 @@ def update_product_listing(
     response_model=list[ProductListingResponse],
     tags=["Listings"],
 )
-def get_product_listings(product_id: int, db: Annotated[Session, Depends(get_db)]):
+def get_product_listings(product_id: EntityId, db: Annotated[Session, Depends(get_db)]):
     """Fetch all generated marketplace listings for a specific product."""
     product = db.get(Product, product_id)
     if not product:

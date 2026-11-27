@@ -8,8 +8,16 @@ class ProductBase(BaseModel):
     name: str = Field(
         ..., min_length=1, max_length=255, description="Product title/name"
     )
-    price: float = Field(..., gt=0, description="Product price in currency units")
-    quantity: int = Field(default=1, ge=1, description="Available stock quantity")
+    price: float = Field(
+        ...,
+        gt=0,
+        le=10_000_000,
+        allow_inf_nan=False,
+        description="Product price in currency units",
+    )
+    quantity: int = Field(
+        default=1, ge=1, le=100_000, description="Available stock quantity"
+    )
     materials: str | None = Field(
         default=None, max_length=500, description="Fabric, metal, ingredients, etc."
     )
@@ -28,8 +36,8 @@ class ProductUpdate(BaseModel):
     """Partial update of a product's seller-supplied details."""
 
     name: str | None = Field(default=None, min_length=1, max_length=255)
-    price: float | None = Field(default=None, gt=0)
-    quantity: int | None = Field(default=None, ge=1)
+    price: float | None = Field(default=None, gt=0, le=10_000_000, allow_inf_nan=False)
+    quantity: int | None = Field(default=None, ge=1, le=100_000)
     materials: str | None = Field(default=None, max_length=500)
     features: str | None = Field(default=None, max_length=2000)
 
