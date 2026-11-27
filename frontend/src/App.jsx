@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import useSellerAssistant from './hooks/useSellerAssistant';
 import Sidebar from './components/Sidebar';
 import ProductForm from './components/ProductForm';
@@ -12,6 +12,26 @@ export default function App() {
   const app = useSellerAssistant();
   const [view, setView] = useState('workspace'); // 'workspace' | 'status'
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const menuButtonRef = useRef(null);
+  const closeButtonRef = useRef(null);
+  const drawerWasOpen = useRef(false);
+
+  // Phone drawer: focus moves into it on open, Escape closes it, and focus
+  // returns to the menu button on close (it is a modal dialog).
+  useEffect(() => {
+    if (!drawerOpen) {
+      if (drawerWasOpen.current) menuButtonRef.current?.focus();
+      drawerWasOpen.current = false;
+      return undefined;
+    }
+    drawerWasOpen.current = true;
+    closeButtonRef.current?.focus();
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setDrawerOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [drawerOpen]);
 
   const { selectedProduct, setNotification } = app;
   const dismissToast = useCallback(() => setNotification(null), [setNotification]);
@@ -64,6 +84,7 @@ export default function App() {
       <div className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-white px-4 lg:hidden">
         <span className="text-[15px] font-semibold tracking-tight">Online Seller Assistant</span>
         <button
+          ref={menuButtonRef}
           type="button"
           onClick={() => setDrawerOpen(true)}
           className="rounded p-1.5 text-muted hover:bg-stone-100 hover:text-ink"
@@ -77,6 +98,7 @@ export default function App() {
           <div className="absolute inset-0 bg-black/30" onClick={() => setDrawerOpen(false)} />
           <div className="absolute inset-y-0 left-0 w-72 max-w-[85%] bg-white shadow-xl">
             <button
+              ref={closeButtonRef}
               type="button"
               onClick={() => setDrawerOpen(false)}
               className="absolute right-2 top-3 rounded p-1.5 text-muted hover:bg-stone-100"

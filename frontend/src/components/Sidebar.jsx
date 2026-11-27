@@ -70,7 +70,7 @@ export default function Sidebar({
           type="button"
           onClick={onRetry}
           disabled={productsLoading}
-          className="rounded p-1 text-muted hover:bg-stone-100 hover:text-ink disabled:opacity-50"
+          className="-mr-1.5 inline-flex h-8 w-8 items-center justify-center rounded text-muted hover:bg-stone-100 hover:text-ink disabled:opacity-50"
           aria-label="Refresh saved products"
         >
           <Icon name="refresh" className={`h-3.5 w-3.5 ${productsLoading ? 'animate-spin' : ''}`} />
@@ -106,7 +106,7 @@ export default function Sidebar({
                     type="button"
                     onClick={() => onSelect(p)}
                     aria-current={selected ? 'true' : undefined}
-                    className={`block w-full rounded-md border-l-2 py-2 pl-2.5 pr-8 text-left transition-colors ${
+                    className={`block w-full rounded-md border-l-2 py-2 pl-2.5 pr-10 text-left transition-colors ${
                       selected ? 'border-ink bg-stone-100' : 'border-transparent hover:bg-stone-50'
                     }`}
                   >
@@ -128,7 +128,7 @@ export default function Sidebar({
                     type="button"
                     onClick={() => onDelete(p)}
                     aria-label={`Delete ${p.name}`}
-                    className="absolute right-1.5 top-2 rounded p-1 text-muted opacity-0 transition-opacity hover:bg-red-50 hover:text-red-700 focus:opacity-100 group-hover:opacity-100"
+                    className="absolute right-1 top-1 inline-flex h-8 w-8 items-center justify-center rounded text-muted opacity-0 transition-opacity hover:bg-red-50 hover:text-red-700 focus:opacity-100 group-hover:opacity-100"
                   >
                     <Icon name="trash" className="h-3.5 w-3.5" />
                   </button>

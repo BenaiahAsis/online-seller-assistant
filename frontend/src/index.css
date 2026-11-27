@@ -25,7 +25,7 @@
 
 @layer components {
   .field {
-    @apply w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-ink placeholder:text-muted/70 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent;
+    @apply w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent;
   }
   .field-label {
     @apply mb-1.5 block text-[13px] font-medium text-ink;
