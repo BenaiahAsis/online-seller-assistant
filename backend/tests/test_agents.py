@@ -764,3 +764,215 @@ def test_listing_agent_logs_its_own_validation():
     stages = _stages(generate_agent_3_logs(PRODUCT, listings))
     assert "VALIDATE_REJECT" in stages
     assert "RETRY_RECOVERED" in stages
+
+
+# --------------------------------------------------------------------------
+# QA fixes: template fallback states only the seller's facts
+# (B1, B3, B17, B4, B24)
+# --------------------------------------------------------------------------
+
+INVENTED_PHRASES = (
+    "durable",
+    "craftsmanship",
+    "nationwide",
+    "secure checkout",
+    "standard manufactured",
+    "ready-to-ship",
+    "premium",
+    "official",
+    "bonus",
+    "voucher",
+    "fast shipping",
+    "fast delivery",
+    "run out",
+    "sleek",
+)
+
+
+def _all_listing_text(listings):
+    return " ".join(
+        " ".join(
+            [
+                item["title"],
+                item["description"],
+                item["call_to_action"],
+                *item["bullet_points"],
+            ]
+        )
+        for item in listings
+    ).lower()
+
+
+def test_b1_decimals_are_never_split():
+    from app.agents.product_analyzer import _derive_fallback_profile
+
+    profile = _derive_fallback_profile(
+        name="Keyboard",
+        price=1299.0,
+        quantity=10,
+        materials=None,
+        features="Bluetooth 5.0 and 2.4GHz wireless",
+    )
+    points = profile["selling_points"]
+    assert any("5.0" in p for p in points)
+    assert any("2.4GHz" in p for p in points)
+    assert "0 and 2" not in points
+
+
+def test_b1_thousands_separator_is_never_split():
+    from app.agents.product_analyzer import split_seller_notes
+
+    assert split_seller_notes("Bundle worth 1,299 pesos") == [
+        "Bundle worth 1,299 pesos"
+    ]
+
+
+def test_b3_labelled_list_stays_whole_and_later_points_survive():
+    from app.agents.product_analyzer import _derive_fallback_profile
+
+    profile = _derive_fallback_profile(
+        name="Soy Candle",
+        price=349.0,
+        quantity=20,
+        materials=None,
+        features="scents: vanilla, lavender, sandalwood. made in Cebu. no paraffin",
+    )
+    points = profile["selling_points"]
+    assert "scents: vanilla, lavender, sandalwood" in points
+    assert "made in Cebu" in points
+    assert "no paraffin" in points
+
+    listings = _derive_fallback_listings(
+        name="Soy Candle",
+        price=349.0,
+        materials=None,
+        features="scents: vanilla, lavender, sandalwood. made in Cebu. no paraffin",
+        category=profile["category"],
+        selling_points=points,
+        keywords=profile["suggested_keywords"],
+    )
+    for item in listings:
+        text = " ".join(item["bullet_points"])
+        assert "sandalwood" in text
+        assert "no paraffin" in text
+
+
+def test_b3_plain_comma_list_still_splits_into_features():
+    from app.agents.product_analyzer import split_seller_notes
+
+    assert split_seller_notes("Breathable fabric, double-stitched hem, preshrunk") == [
+        "Breathable fabric",
+        "double-stitched hem",
+        "preshrunk",
+    ]
+
+
+def test_b17_name_and_price_only_invents_nothing():
+    from app.agents.product_analyzer import _derive_fallback_profile
+
+    profile = _derive_fallback_profile(
+        name="Plain Mug", price=150.0, quantity=1, materials=None, features=None
+    )
+    assert profile["key_specifications"]["material_composition"] == "Not specified"
+    profile_text = " ".join(profile["selling_points"] + [profile["raw_summary"]])
+    for phrase in INVENTED_PHRASES:
+        assert phrase not in profile_text.lower(), phrase
+
+    listings = _derive_fallback_listings(
+        name="Plain Mug",
+        price=150.0,
+        materials=None,
+        features=None,
+        category=profile["category"],
+        selling_points=profile["selling_points"],
+        keywords=profile["suggested_keywords"],
+    )
+    text = _all_listing_text(listings)
+    for phrase in INVENTED_PHRASES:
+        assert phrase not in text, phrase
+    assert scan_claims(listings, "plain mug 150") == []
+
+
+def test_b17_titles_use_seller_material_as_written():
+    listings = _derive_fallback_listings(
+        name="Lumbar Cushion",
+        price=349.0,
+        materials="High-density memory foam, mesh cover",
+        features="adjustable strap",
+        category="Home & Living",
+        selling_points=["adjustable strap"],
+        keywords=["lumbar cushion"],
+    )
+    titles = {item["platform"]: item["title"] for item in listings}
+    assert "High & Density" not in " ".join(titles.values())
+    assert "High-density memory foam" in titles["lazada"]
+    assert titles["shopee"].startswith("Lumbar Cushion")
+
+
+def test_b24_logs_spell_tiktok_correctly():
+    market = run_market_analyzer_agent(PRODUCT, PROFILE)
+    listings = _derive_fallback_listings(
+        name=PRODUCT["name"],
+        price=PRODUCT["price"],
+        materials=PRODUCT["materials"],
+        features=PRODUCT["features"],
+        category=PROFILE["category"],
+        selling_points=PROFILE["selling_points"],
+        keywords=PROFILE["suggested_keywords"],
+    )
+    logs = generate_agent_2_logs(PRODUCT, PROFILE, market) + generate_agent_3_logs(
+        PRODUCT, listings
+    )
+    messages = " ".join(entry["message"] for entry in logs)
+    assert "Tiktok" not in messages
+    assert "TikTok strategy" in messages
+    assert "Generated TikTok listing" in messages
+    # Stage keys are unchanged, so nothing keyed on them breaks.
+    assert "GENERATE_TIKTOK" in _stages(logs)
+
+
+def test_b4_log_text_is_seller_friendly_and_agent_field_unchanged():
+    market = run_market_analyzer_agent(PRODUCT, PROFILE)
+    a2 = generate_agent_2_logs(PRODUCT, PROFILE, market)
+    a3 = generate_agent_3_logs(PRODUCT, [{"platform": "shopee", "source": "ai"}])
+
+    for entry in a2 + a3:
+        assert "Ingested" not in entry["message"]
+        assert "Agent 1" not in entry["message"]
+        assert "Agent 2" not in entry["message"]
+    assert {e["agent"] for e in a2} == {"Agent 2: Market Analyzer"}
+    assert {e["agent"] for e in a3} == {"Agent 3: Listing Generator"}
+
+
+def test_b4_verified_only_when_checks_passed():
+    fallback = generate_agent_3_logs(
+        PRODUCT, [{"platform": "shopee", "source": "heuristic"}]
+    )
+    passed = generate_agent_3_logs(PRODUCT, [{"platform": "shopee", "source": "ai"}])
+
+    def complete(logs):
+        return next(e["message"] for e in logs if e["stage"] == "COMPLETE")
+
+    assert "verified" not in complete(fallback)
+    assert "verified" in complete(passed)
+
+
+def test_plain_mug_full_pipeline_end_to_end():
+    created = client.post("/api/products", json={"name": "Plain Mug", "price": 150})
+    assert created.status_code in (200, 201)
+    product_id = created.json()["id"]
+
+    res = client.post(f"/api/products/{product_id}/full-pipeline")
+    assert res.status_code == 200
+
+    listings = client.get(f"/api/products/{product_id}/listings").json()
+    assert len(listings) == 3
+    text = _all_listing_text(listings)
+    for phrase in INVENTED_PHRASES:
+        assert phrase not in text, phrase
+
+    logs = client.get(f"/api/products/{product_id}/logs").json()
+    entries = logs.get("logs", logs) if isinstance(logs, dict) else logs
+    messages = " ".join(e["message"] for e in entries)
+    assert "Tiktok" not in messages
+    assert "Ingested" not in messages

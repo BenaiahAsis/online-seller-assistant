@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import os
-import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.agents.product_analyzer import split_seller_notes
 from app.agents.validation import (
     PLACEHOLDER_KEYS,
     build_corpus,
@@ -95,42 +95,29 @@ def build_fallback_titles(
     features: str | None,
 ) -> dict[str, str]:
     feats = [
-        f.strip()
-        for f in re.split(r"[,;.\n]+", features or "")
-        if f.strip()
-        and "most bought" not in f.lower()
-        and "best seller" not in f.lower()
+        f
+        for f in split_seller_notes(features)
+        if "most bought" not in f.lower() and "best seller" not in f.lower()
     ]
     perk = feats[0] if feats else ""
-    perk_phrase = f" with {perk}" if perk else ""
-    bonus_phrase = f" (+ {perk} Bonus!)" if perk else ""
+    # The seller's first listed material, as written: splitting it into words
+    # turned "High-density memory foam" into "High & Density".
+    material = (materials or "").split(",")[0].strip()
 
-    mat_words = [
-        w.capitalize()
-        for w in re.findall(r"[a-zA-Z]+", materials or "")
-        if w.lower() not in {"zinc", "iron"}
-    ][:2]
-    mat_desc = " & ".join(mat_words) if mat_words else ""
-
-    # 1. Shopee: Keyword-rich search title under 120 chars
-    if "smartwatch" in name.lower() or "watch" in name.lower():
-        shopee_title = f"{name}{perk_phrase} | Durable {mat_desc or 'Digital'} Watch"
-    else:
-        descriptor = mat_desc or (category or "Quality Build")
-        shopee_title = f"{name}{perk_phrase} | Durable {descriptor}"
+    # Titles use only seller facts: no "Durable", "Premium", "Official" or
+    # "Bonus" the seller never claimed (B17).
+    # 1. Shopee: search title, name plus the first seller point
+    shopee_title = " | ".join(part for part in (name, perk or category) if part)
     if len(shopee_title) > 115:
         shopee_title = shopee_title[:115]
 
-    # 2. TikTok: Short punchy hook
-    tiktok_title = f"Upgrade Your Daily Style With This Sleek {name}{bonus_phrase}"
+    # 2. TikTok: short hook that names the product
+    tiktok_title = f"Check out the {name}" + (f": {perk}" if perk else "")
     if len(tiktok_title) > 100:
         tiktok_title = tiktok_title[:100]
 
-    # 3. Lazada: Clean trust title with material/feature
-    if mat_desc:
-        lazada_title = f"{name} - Premium {mat_desc} Design{perk_phrase}"
-    else:
-        lazada_title = f"{name} - {category or 'Official Edition'}{perk_phrase}"
+    # 3. Lazada: name, material and first point
+    lazada_title = " - ".join(part for part in (name, material, perk) if part)
     if len(lazada_title) > 120:
         lazada_title = lazada_title[:120]
 
@@ -172,13 +159,12 @@ def _derive_fallback_listings(
         str(p)
         for p in (selling_points or [])
         if str(p).strip() and "all details above" not in str(p).lower()
-    ][:4]
+    ][:5]
 
     if not clean_bullets:
-        clean_bullets = [
-            f"Crafted with {materials or 'durable components'} for daily wear",
-            f"Accessible everyday price of {CURRENCY}{price:,.2f}",
-        ]
+        if materials:
+            clean_bullets.append(f"Made with {materials}")
+        clean_bullets.append(f"Listed at {CURRENCY}{price:,.2f}")
 
     terms = [
         str(k)
@@ -203,32 +189,26 @@ def _derive_fallback_listings(
     spec_block = "\n".join(specs)
     highlights_block = "\n".join(f"✨ {b}" for b in clean_bullets)
 
+    # Descriptions restate the seller's details only. No shipping speed,
+    # delivery coverage, vouchers, stock urgency or quality claims (B17).
     shopee_desc = (
-        f"Elevate your daily routine with the {name}. Designed for comfort, "
-        f"style, and lasting reliability wherever your day takes you.\n\n"
+        f"{name}\n\n"
         f"KEY HIGHLIGHTS:\n{highlights_block}\n\n"
-        f"PRODUCT SPECIFICATIONS:\n{spec_block}\n\n"
-        f"Ready stock available for prompt dispatch. Add to cart today!"
+        f"PRODUCT SPECIFICATIONS:\n{spec_block}"
     )
-    shopee_cta = "Claim shop vouchers and add to cart now!"
+    shopee_cta = "Add to cart now."
 
     tiktok_desc = (
-        f"Looking for a sleek, stylish {name} that fits your daily vibe? "
-        f"Check this out! 👀\n\n"
-        f"{highlights_block}\n\n"
-        f"Price: {CURRENCY}{price:,.2f} | Fast shipping & ready stock!"
+        f"Here's the {name} 👀\n\n{highlights_block}\n\nPrice: {CURRENCY}{price:,.2f}"
     )
-    tiktok_cta = "Tap the yellow basket below to order yours before stocks run out!"
+    tiktok_cta = "Tap the yellow basket to order."
 
     lazada_desc = (
-        f"Experience dependable daily performance and sleek craftsmanship "
-        f"with the {name}. Engineered with quality components for everyday "
-        f"peace of mind.\n\n"
+        f"{name}\n\n"
         f"PRODUCT FEATURES:\n{highlights_block}\n\n"
-        f"SPECIFICATION DETAILS:\n{spec_block}\n\n"
-        f"Order with confidence with nationwide parcel delivery."
+        f"SPECIFICATION DETAILS:\n{spec_block}"
     )
-    lazada_cta = "Add to cart now for fast delivery and secure checkout."
+    lazada_cta = "Add to cart now."
 
     return [
         {
