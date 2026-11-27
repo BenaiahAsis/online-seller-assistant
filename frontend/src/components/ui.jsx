@@ -107,9 +107,9 @@ export function SectionHeading({ children, action }) {
   );
 }
 
-export function CopyButton({ onClick, label = 'Copy' }) {
+export function CopyButton({ onClick, label = 'Copy', ariaLabel }) {
   return (
-    <Button variant="ghost" size="sm" onClick={onClick}>
+    <Button variant="ghost" size="sm" onClick={onClick} aria-label={ariaLabel}>
       <Icon name="copy" className="h-3.5 w-3.5" />
       {label}
     </Button>

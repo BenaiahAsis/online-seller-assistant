@@ -157,7 +157,9 @@ export default function ListingPreview({
       ) : (
         <div className="divide-y divide-line">
           <section className="pb-6">
-            <SectionHeading action={!isEditing && <CopyButton onClick={() => copy(listing.title, 'Title')} />}>
+            <SectionHeading
+              action={!isEditing && <CopyButton ariaLabel="Copy title" onClick={() => copy(listing.title, 'Title')} />}
+            >
               Title{' '}
               <span className="ml-1 text-xs font-normal tabular-nums text-muted">
                 {(isEditing ? editTitle : listing.title).length}/{TITLE_MAX}
@@ -173,7 +175,7 @@ export default function ListingPreview({
                 className="field"
               />
             ) : (
-              <p className="text-base font-medium leading-snug">{listing.title}</p>
+              <p className="break-words text-base font-medium leading-snug">{listing.title}</p>
             )}
           </section>
 
@@ -181,12 +183,15 @@ export default function ListingPreview({
             <section className="py-6">
               <SectionHeading
                 action={!isEditing && (
-                  <CopyButton onClick={() => copy(listing.bullet_points.map((p) => `• ${p}`).join('\n'), 'Highlights')} />
+                  <CopyButton
+                    ariaLabel="Copy highlights"
+                    onClick={() => copy(listing.bullet_points.map((p) => `• ${p}`).join('\n'), 'Highlights')}
+                  />
                 )}
               >
                 Highlights
               </SectionHeading>
-              <ul className="list-disc space-y-1 pl-5 text-sm leading-relaxed marker:text-muted">
+              <ul className="list-disc space-y-1 break-words pl-5 text-sm leading-relaxed marker:text-muted">
                 {listing.bullet_points.map((pt, i) => (
                   <li key={i}>{pt}</li>
                 ))}
@@ -195,7 +200,13 @@ export default function ListingPreview({
           )}
 
           <section className="py-6">
-            <SectionHeading action={!isEditing && <CopyButton onClick={() => copy(listing.description, 'Description')} />}>
+            <SectionHeading
+              action={
+                !isEditing && (
+                  <CopyButton ariaLabel="Copy description" onClick={() => copy(listing.description, 'Description')} />
+                )
+              }
+            >
               Description
             </SectionHeading>
             {isEditing ? (
@@ -222,27 +233,41 @@ export default function ListingPreview({
                 </div>
               </>
             ) : (
-              <p className="whitespace-pre-wrap text-sm leading-relaxed">{listing.description}</p>
+              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{listing.description}</p>
             )}
           </section>
 
           {listing.call_to_action && (
             <section className="py-6">
-              <SectionHeading action={<CopyButton onClick={() => copy(listing.call_to_action, 'Call to action')} />}>
+              <SectionHeading
+                action={
+                  <CopyButton
+                    ariaLabel="Copy call to action"
+                    onClick={() => copy(listing.call_to_action, 'Call to action')}
+                  />
+                }
+              >
                 Call to action
               </SectionHeading>
-              <p className="text-sm">{listing.call_to_action}</p>
+              <p className="break-words text-sm">{listing.call_to_action}</p>
             </section>
           )}
 
           {listing.hashtags?.length > 0 && (
             <section className="pt-6">
-              <SectionHeading action={<CopyButton onClick={() => copy(listing.hashtags.join(' '), 'Hashtags')} />}>
+              <SectionHeading
+                action={
+                  <CopyButton ariaLabel="Copy hashtags" onClick={() => copy(listing.hashtags.join(' '), 'Hashtags')} />
+                }
+              >
                 Hashtags
               </SectionHeading>
               <div className="flex flex-wrap gap-1.5">
                 {listing.hashtags.map((tag) => (
-                  <span key={tag} className="rounded bg-stone-100 px-2 py-1 text-[13px] text-stone-800">
+                  <span
+                    key={tag}
+                    className="min-w-0 max-w-full break-words rounded bg-stone-100 px-2 py-1 text-[13px] text-stone-800"
+                  >
                     {tag.startsWith('#') ? tag : `#${tag}`}
                   </span>
                 ))}
