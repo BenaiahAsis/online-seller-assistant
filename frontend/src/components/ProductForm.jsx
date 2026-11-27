@@ -32,7 +32,7 @@ export default function ProductForm({
       <div>
         <h1 className="text-xl font-semibold tracking-tight">New product</h1>
         <p className="mt-1 text-sm text-muted">
-          Messy notes are fine. Paste what your supplier gave you.
+          Rough notes are fine. Paste what your supplier gave you.
         </p>
       </div>
 
