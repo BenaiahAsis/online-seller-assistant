@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 
 // All app state and API calls. Components receive what they need from App.jsx.
 
@@ -17,7 +17,11 @@ const productsEndpoint = `${apiUrl}/api/products`;
 
 const errorMessage = (err, fallback) => (err instanceof Error ? err.message : fallback);
 
+const RATE_LIMIT_MESSAGE =
+  'Too many requests. You can create listings 5 times a minute. Wait a minute and try again.';
+
 async function readError(res, fallback) {
+  if (res.status === 429) return new Error(RATE_LIMIT_MESSAGE);
   const body = await res.json().catch(() => null);
   const detail = Array.isArray(body?.detail)
     ? body.detail.map((d) => d.msg).join('; ')
@@ -41,7 +45,6 @@ export default function useSellerAssistant() {
   const [productsError, setProductsError] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [editingProductId, setEditingProductId] = useState(null);
-  const hasAutoSelected = useRef(false);
 
   // Runs
   const [submitting, setSubmitting] = useState(false);
@@ -105,19 +108,12 @@ export default function useSellerAssistant() {
       const data = await response.json();
       const incoming = data.products || [];
       setProducts(incoming);
-      // Only pick a product automatically on the first successful load. Afterwards
-      // an empty selection means the seller chose "New product".
-      const autoPick = hasAutoSelected.current
-        ? null
-        : incoming.find((p) => p.listings && p.listings.length > 0) ||
-          incoming.find((p) => p.analysis) ||
-          incoming[0] ||
-          null;
-      hasAutoSelected.current = true;
-      setSelectedProduct((current) => {
-        if (current) return incoming.find((p) => p.id === current.id) || current;
-        return autoPick;
-      });
+      // Never pick a product automatically: the app starts on the New product form,
+      // so a first-time seller isn't dropped into someone else's listing. A refresh
+      // keeps whatever the seller already selected.
+      setSelectedProduct((current) =>
+        current ? incoming.find((p) => p.id === current.id) || current : null
+      );
       setProductsError(null);
       setProductsLoaded(true);
     } catch (err) {
@@ -289,6 +285,10 @@ export default function useSellerAssistant() {
   };
 
   const handleRunFullPipeline = async (productId) => {
+    // Same endpoint for a first run and a Regenerate; word errors for what the seller clicked.
+    const isRegenerate =
+      selectedProduct?.id === productId && (selectedProduct.listings?.length ?? 0) > 0;
+    const failedMessage = isRegenerate ? 'Regenerating listings failed' : 'Creating listings failed';
     setRunningPipelineId(productId);
     setIsExecutingLogs(true);
     setNotification(null);
@@ -298,7 +298,7 @@ export default function useSellerAssistant() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
-      if (!res.ok) throw await readError(res, 'Creating listings failed');
+      if (!res.ok) throw await readError(res, failedMessage);
       const data = await res.json();
       setSelectedProduct(data.product);
       if (data.logs && data.logs.length > 0) setAgentLogs(data.logs);
@@ -309,7 +309,7 @@ export default function useSellerAssistant() {
       });
       await fetchProducts();
     } catch (err) {
-      const msg = errorMessage(err, 'Creating listings failed.');
+      const msg = errorMessage(err, `${failedMessage}.`);
       addProgressLog('Pipeline Orchestrator', 'ERROR', msg, 'ERROR');
       setNotification({ type: 'error', message: msg });
     } finally {
