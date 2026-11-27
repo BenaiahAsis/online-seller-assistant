@@ -171,6 +171,10 @@ def render_validation_logs(
 # ---------------------------------------------------------------------------
 
 
+# Display names for log messages. .title() would print "Tiktok" (B24).
+PLATFORM_LABELS = {"shopee": "Shopee", "tiktok": "TikTok", "lazada": "Lazada"}
+
+
 def generate_agent_1_logs(
     product_data: dict[str, Any],
     analysis_result: dict[str, Any],
@@ -192,7 +196,7 @@ def generate_agent_1_logs(
         make_log(
             agent_name,
             "INGEST",
-            f"Ingested inputs for '{name}' (₱{price:,.2f}, {quantity} in stock)",
+            f"Read product details for '{name}' (₱{price:,.2f}, {quantity} in stock)",
             details={"name": name, "price": price, "quantity": quantity},
         )
     )
@@ -316,7 +320,7 @@ def generate_agent_2_logs(
         make_log(
             agent_name,
             "INGEST",
-            f"Ingested Agent 1 profile for '{name}' with {points_count} points",
+            f"Read the product profile for '{name}' ({points_count} selling points)",
         )
     )
 
@@ -359,7 +363,8 @@ def generate_agent_2_logs(
             make_log(
                 agent_name,
                 f"STRATEGY_{plat.upper()}",
-                f"{plat.title()} strategy: focus='{focus}', tone='{tone}'",
+                f"{PLATFORM_LABELS.get(plat, plat.title())} strategy: "
+                f"focus='{focus}', tone='{tone}'",
                 details=strat,
             )
         )
@@ -406,13 +411,14 @@ def generate_agent_3_logs(
         make_log(
             agent_name,
             "INGEST",
-            f"Ingested Agent 1 specs & Agent 2 channel strategies for '{name}'",
+            f"Read the product profile and channel strategy for '{name}'",
         )
     )
 
     # Step 2: Synthesis per channel
     for listing in listings_result:
-        plat = listing.get("platform", "marketplace").capitalize()
+        key = listing.get("platform", "marketplace")
+        plat = PLATFORM_LABELS.get(key, key.title())
         title = listing.get("title", "")
         bullets = listing.get("bullet_points") or []
         tags = listing.get("hashtags") or []
@@ -421,7 +427,7 @@ def generate_agent_3_logs(
         logs.append(
             make_log(
                 agent_name,
-                f"GENERATE_{plat.upper()}",
+                f"GENERATE_{key.upper()}",
                 f"Generated {plat} listing: {len(title)} chars, "
                 f"{len(bullets)} highlights, {len(tags)} tags ({source})",
                 details={
@@ -445,12 +451,16 @@ def generate_agent_3_logs(
     )
     logs.extend(render_validation_logs(agent_name, events, used_fallback=has_fallback))
 
-    # Step 4: Completion
+    # Step 4: Completion. Fallback listings were never checked, so say so (B4).
+    if has_fallback:
+        summary = "Listings generated for Shopee, TikTok, and Lazada using the template"
+    else:
+        summary = "Listings generated and verified for Shopee, TikTok, and Lazada"
     logs.append(
         make_log(
             agent_name,
             "COMPLETE",
-            "Tailored listings generated and verified for Shopee, TikTok, and Lazada",
+            summary,
             level="SUCCESS",
         )
     )

@@ -304,6 +304,32 @@ def detect_unverified_claims(features: str | None) -> list[dict[str, str]]:
     return flags
 
 
+# Sentence breaks: semicolons, line breaks, and a period that is not between
+# two digits, so "5.0" and "2.4GHz" are never cut apart (B1).
+_NOTE_BREAK = re.compile(r"[;\r\n]+|(?<!\d)\.|\.(?!\d)")
+# A comma that is not between two digits, so "1,299" stays whole.
+_LIST_COMMA = re.compile(r"(?<!\d),|,(?!\d)")
+
+
+def split_seller_notes(text: str | None) -> list[str]:
+    """Split free-text seller notes into whole points (B1, B3).
+
+    A sentence with a colon is a labelled list ("scents: vanilla, lavender")
+    and stays one point. Otherwise its commas separate distinct features
+    ("Breathable fabric, double-stitched hem").
+    """
+    points: list[str] = []
+    for sentence in _NOTE_BREAK.split(text or ""):
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        if ":" in sentence:
+            points.append(sentence)
+        else:
+            points.extend(p.strip() for p in _LIST_COMMA.split(sentence) if p.strip())
+    return points
+
+
 def check_thin_input(
     name: str,
     materials: str | None,
@@ -311,9 +337,7 @@ def check_thin_input(
     category: str,
 ) -> list[str]:
     """Return suggested questions if seller input has fewer than ~3 facts."""
-    raw_facts = [
-        f.strip() for f in re.split(r"[,;.\n]+", features or "") if len(f.strip()) > 3
-    ]
+    raw_facts = [f for f in split_seller_notes(features) if len(f) > 3]
     has_materials = bool(materials and len(materials.strip()) > 2)
     facts_count = len(raw_facts) + (1 if has_materials else 0)
 
@@ -381,9 +405,7 @@ def _derive_fallback_profile(
     price_warning = check_price_sanity(price, name, category)
 
     # Extract distinct selling points from features or name
-    raw_points = [
-        p.strip() for p in re.split(r"[,;.\n]+", features or "") if len(p.strip()) > 3
-    ]
+    raw_points = [p for p in split_seller_notes(features) if len(p) > 3]
 
     # Clean and soften any unverified claims in selling points
     selling_points: list[str] = []
@@ -396,17 +418,19 @@ def _derive_fallback_profile(
         else:
             selling_points.append(pt)
 
+    # With no notes, state only what the seller actually entered (B17).
     if not selling_points:
-        selling_points = [
-            f"Durable construction featuring {materials or 'quality components'}",
-            f"Accessible everyday value at ₱{price:,.2f}",
-            "Ready-to-ship inventory backed by prompt seller dispatch",
-        ]
+        if materials:
+            selling_points.append(f"Made with {materials}")
+        selling_points.append(f"Listed at ₱{price:,.2f}")
+        if quantity > 0:
+            unit = "unit" if quantity == 1 else "units"
+            selling_points.append(f"{quantity} {unit} in stock")
 
+    focus = f" with key focus on {materials}" if materials else ""
     raw_summary = (
         f"{name} is positioned under {category}, tailored for "
-        f"{audience.lower()} with key focus on "
-        f"{materials or 'practical daily utility'}."
+        f"{audience.lower()}{focus}."
     )
 
     market_insights = {
@@ -421,7 +445,7 @@ def _derive_fallback_profile(
         "key_specifications": {
             "listed_price": f"₱{price:,.2f}",
             "available_stock": f"{quantity} units",
-            "material_composition": materials or "Standard manufactured grade",
+            "material_composition": materials or "Not specified",
         },
         "selling_points": selling_points[:5],
         "suggested_keywords": keywords,
