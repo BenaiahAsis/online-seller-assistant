@@ -38,13 +38,14 @@ This runbook outlines operational procedures for deploying, maintaining, and rec
 
 ## 2. Rollback
 
-### Frontend Rollback (Vercel) [untested]
+### Frontend Rollback (Vercel) [tested 2026-11-27, about 18 s to recover]
 If a frontend release introduces visual regressions or runtime errors:
 1. Open the **Vercel Dashboard** and navigate to the project.
-2. Go to the **Deployments** tab.
-3. Locate the previous known-good deployment.
-4. Click the three-dots menu (`...`) next to the deployment and select **Instant Rollback** / **Promote to Production**.
-5. Traffic immediately routes to the previous deployment artifact.
+2. Go to the **Deployments** tab and click the previous known-good **Production** deployment to open its page. (The list row's actions button is hidden on narrow screens; the deployment page always has it.)
+3. Click the **⋯** menu at the top right and choose **Instant Rollback**. On the free Hobby plan only the *previous* production deployment is offered; an earlier one needs Pro.
+4. Type a short reason (it is kept in the project history) and click **Continue**, then **Confirm Rollback**. Vercel reassigns the production domain to that deployment within seconds.
+5. Hard-refresh the live site (Ctrl+Shift+R) and confirm the old version is back.
+6. **Roll forward when the fix is ready.** After a rollback Vercel stops promoting new production deploys automatically. Open the latest good deployment, click **⋯ → Promote**, and confirm ("This action will undo the current Instant Rollback"). Until you do this, merges to `main` will build but not go live.
 
 ### Backend Rollback (Render) [untested]
 If a backend release fails or introduces API regressions:
@@ -121,5 +122,5 @@ The Render free tier puts web services to sleep after 15 minutes of inactivity:
 ## 6. Rehearsing a Rollback (do this once before Demo Day)
 
 1. **Render:** service → **Events** → find the deploy *before* the current one → **Rollback**. Wait for it to go live, then check that `/health` returns 200. Then roll forward again by redeploying the latest commit.
-2. **Vercel:** project → **Deployments** → previous Production deployment → **⋯ → Instant Rollback** (or **Promote to Production**). Open the site to confirm it changed, then promote the latest deployment again.
-3. Record the time each step took in `docs/metrics-log.md` (time to recover).
+2. **Vercel (done 2026-11-27):** project → **Deployments** → previous Production deployment → **⋯ → Instant Rollback**. Open the site to confirm it changed, then open the latest deployment → **⋯ → Promote** to roll forward. Measured: rollback confirmed 20:10:30, old version live by 20:10:48; promoted 20:11:48, new version live by 20:12:02. Details in `docs/metrics-log.md`.
+3. Record the time each step took in `docs/metrics-log.md` (time to recover). **Still to do:** rehearse the Render rollback (step 1) and record its time.
