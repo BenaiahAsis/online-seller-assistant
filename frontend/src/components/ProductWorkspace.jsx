@@ -52,7 +52,7 @@ export default function ProductWorkspace({
       ) : (
         <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <h1 className="text-xl font-semibold leading-snug tracking-tight">{product.name}</h1>
+            <h1 className="break-words text-xl font-semibold leading-snug tracking-tight">{product.name}</h1>
             <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
               <span className="font-medium tabular-nums text-ink">{formatPeso(product.price)}</span>
               <span aria-hidden="true">·</span>
@@ -67,7 +67,7 @@ export default function ProductWorkspace({
             </Button>
             <Button variant="ghost" size="sm" onClick={() => onRunAnalysis(product.id)} disabled={busy}>
               <Icon name="refresh" className="h-3.5 w-3.5" />
-              Re-analyze
+              {product.analysis ? 'Re-analyze' : 'Analyze'}
             </Button>
           </div>
         </header>
